@@ -36,12 +36,12 @@ export function useChat() {
       }
       
       if (message.userId === currentUser.value?.userId) {
-        const username = currentUser.value?.username || `User_${message.userId}`;
+        const username = currentUser.value?.username ;
         userMap.value.set(message.userId, username);
         return { ...message, username };
       }
       
-      const fallbackUsername = `User_${message.userId.substring(0, 8)}`;
+      const fallbackUsername = `User_${message.username}`;
       userMap.value.set(message.userId, fallbackUsername);
       return { ...message, username: fallbackUsername };
     });
@@ -205,13 +205,15 @@ export function useChat() {
       if (!userId) {
         throw new Error('User ID not available');
       }
+      const username = currentUser.value?.username || '';
 
-      const response = await chatService.sendMessage(userId, messageContent, roomId.value);
+
+      const response = await chatService.sendMessage(userId, username, messageContent, roomId.value);
 
       const newMessage = {
         messageId: response.messageId,
         userId: response.userId,
-        username: currentUser.value?.username || `User_${response.userId}`,
+        username: 'user_'+response.username,
         content: response.content,
         timestamp: response.timestamp,
         roomId: response.roomId

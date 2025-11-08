@@ -82,7 +82,7 @@ func (h *ChatHandler) ValidateToken(ctx context.Context, req *pb.TokenRequest) (
 func (h *ChatHandler) SendMessage(ctx context.Context, req *pb.MessageRequest) (*pb.MessageResponse, error) {
 	log.Printf("Storing message from user: %s", req.GetUserId())
 
-	message, err := h.messageUseCase.SendMessage(ctx, req.GetUserId(), req.GetContent(), req.GetRoomId())
+	message, err := h.messageUseCase.SendMessage(ctx, req.GetUserId(), req.GetUsername(), req.GetContent(), req.GetRoomId())
 	if err != nil {
 		log.Printf("Error storing message: %v", err)
 		return nil, err
@@ -93,6 +93,7 @@ func (h *ChatHandler) SendMessage(ctx context.Context, req *pb.MessageRequest) (
 	return &pb.MessageResponse{
 		MessageId: message.ID,
 		UserId:    message.UserID,
+		Username:  message.Username,
 		Content:   message.Content,
 		RoomId:    message.RoomID,
 		Timestamp: message.Timestamp.Format(time.RFC3339),
@@ -126,7 +127,7 @@ func (h *ChatHandler) StreamMessages(req *pb.StreamRequest, stream pb.ChatServic
 				return nil
 			}
 
-			username := "user_" + message.UserID
+			username := "user_" + message.Username
 			if user, err := h.authUseCase.ValidateToken(ctx, req.GetToken()); err == nil {
 				username = user.Username
 			}
@@ -134,10 +135,10 @@ func (h *ChatHandler) StreamMessages(req *pb.StreamRequest, stream pb.ChatServic
 			resp := &pb.MessageResponse{
 				MessageId: message.ID,
 				UserId:    message.UserID,
+				Username:  username,
 				Content:   message.Content,
 				RoomId:    message.RoomID,
 				Timestamp: message.Timestamp.Format(time.RFC3339),
-				Username:  username,
 			}
 
 			log.Printf("Sending message to stream: %s", resp.GetContent())
@@ -172,7 +173,7 @@ func (h *ChatHandler) GetMessageHistory(ctx context.Context, req *pb.HistoryRequ
 	for i := len(messages) - 1; i >= 0; i-- {
 		message := messages[i]
 
-		username := "user_" + message.UserID
+		username := "user_" + message.Username
 		if user, err := h.authUseCase.ValidateToken(ctx, req.GetToken()); err == nil {
 			username = user.Username
 		}
@@ -180,10 +181,10 @@ func (h *ChatHandler) GetMessageHistory(ctx context.Context, req *pb.HistoryRequ
 		pbMessages = append(pbMessages, &pb.MessageResponse{
 			MessageId: message.ID,
 			UserId:    message.UserID,
+			Username:  username,
 			Content:   message.Content,
 			RoomId:    message.RoomID,
 			Timestamp: message.Timestamp.Format(time.RFC3339),
-			Username:  username,
 		})
 	}
 

@@ -416,8 +416,9 @@ export class MessageRequest {
   static toObject(includeInstance, msg) {
     var f, obj = {
       userId: jspb.Message.getFieldWithDefault(msg, 1, ""),
-      content: jspb.Message.getFieldWithDefault(msg, 2, ""),
-      roomId: jspb.Message.getFieldWithDefault(msg, 3, "")
+      username: jspb.Message.getFieldWithDefault(msg, 2, ""),
+      content: jspb.Message.getFieldWithDefault(msg, 3, ""),
+      roomId: jspb.Message.getFieldWithDefault(msg, 4, "")
     };
 
     if (includeInstance) {
@@ -445,9 +446,13 @@ export class MessageRequest {
           break;
         case 2:
           var value = reader.readString();
-          msg.setContent(value);
+          msg.setUsername(value);
           break;
         case 3:
+          var value = reader.readString();
+          msg.setContent(value);
+          break;
+        case 4:
           var value = reader.readString();
           msg.setRoomId(value);
           break;
@@ -471,13 +476,17 @@ export class MessageRequest {
     if (f.length > 0) {
       writer.writeString(1, f);
     }
-    f = message.getContent();
+    f = message.getUsername();
     if (f.length > 0) {
       writer.writeString(2, f);
     }
-    f = message.getRoomId();
+    f = message.getContent();
     if (f.length > 0) {
       writer.writeString(3, f);
+    }
+    f = message.getRoomId();
+    if (f.length > 0) {
+      writer.writeString(4, f);
     }
   }
 
@@ -488,21 +497,27 @@ export class MessageRequest {
   setUserId(value) {
     return jspb.Message.setProto3StringField(this, 1, value);
   }
-
-  getContent() {
+  getUsername() {
     return jspb.Message.getFieldWithDefault(this, 2, "");
   }
 
-  setContent(value) {
+  setUsername(value) {
     return jspb.Message.setProto3StringField(this, 2, value);
   }
-
-  getRoomId() {
+  getContent() {
     return jspb.Message.getFieldWithDefault(this, 3, "");
   }
 
-  setRoomId(value) {
+  setContent(value) {
     return jspb.Message.setProto3StringField(this, 3, value);
+  }
+
+  getRoomId() {
+    return jspb.Message.getFieldWithDefault(this, 4, "");
+  }
+
+  setRoomId(value) {
+    return jspb.Message.setProto3StringField(this, 4, value);
   }
 }
 

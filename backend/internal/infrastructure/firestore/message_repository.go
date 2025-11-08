@@ -24,6 +24,7 @@ func NewMessageRepository(client *firestore.Client) repositories.MessageReposito
 func (r *MessageRepositoryImpl) Create(ctx context.Context, message *entities.Message) (*entities.Message, error) {
 	messageData := map[string]interface{}{
 		"user_id":   message.UserID,
+		"username":  message.Username,
 		"content":   message.Content,
 		"room_id":   message.RoomID,
 		"timestamp": firestore.ServerTimestamp,
@@ -120,6 +121,7 @@ func (r *MessageRepositoryImpl) documentToMessage(doc *firestore.DocumentSnapsho
 	return &entities.Message{
 		ID:        doc.Ref.ID,
 		UserID:    data["user_id"].(string),
+		Username:  data["username"].(string),
 		Content:   data["content"].(string),
 		RoomID:    data["room_id"].(string),
 		Timestamp: timestamp,

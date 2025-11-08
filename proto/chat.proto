@@ -40,8 +40,9 @@ message UserResponse {
 
 message MessageRequest {
   string user_id = 1;  
-  string content = 2;
-  string room_id = 3;
+  string username = 2;
+  string content = 3;
+  string room_id = 4;
 }
 
 message MessageResponse {
