@@ -89,7 +89,6 @@ export class ChatServicePromiseClient {
   }
 }
 
-// Method descriptors that work with both real protobuf and manual objects
 const methodDescriptor_ChatService_SendMessage = new grpcWeb.MethodDescriptor(
   '/chat.ChatService/SendMessage',
   grpcWeb.MethodType.UNARY,

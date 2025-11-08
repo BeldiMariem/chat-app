@@ -1,15 +1,14 @@
 import * as grpcWeb from 'grpc-web';
-import { ChatServiceClient, ChatServicePromiseClient } from './chat_grpc_web_pb.js';
+import { ChatServiceClient } from '../../proto/chat_grpc_web_pb.js';
 
 let MessageRequest, StreamRequest, HistoryRequest;
 
 try {
-  const chatPb = require('./chat_pb.js');
+  const chatPb = require('../../proto/chat_pb.js');
   MessageRequest = chatPb.MessageRequest;
   StreamRequest = chatPb.StreamRequest;
   HistoryRequest = chatPb.HistoryRequest;
 } catch (e) {
-  
   MessageRequest = class {
     constructor() {
       this.userId = '';
@@ -69,7 +68,32 @@ try {
 }
 
 export const client = new ChatServiceClient('http://localhost:8081', null, null);
-export const promiseClient = new ChatServicePromiseClient('http://localhost:8081', null, null);
+
+export class GrpcClient {
+  constructor() {
+    this.client = client;
+    this.isConnected = false;
+  }
+
+  async connect() {
+    this.isConnected = true;
+    return true;
+  }
+
+  disconnect() {
+    this.isConnected = false;
+  }
+
+  getClient() {
+    return this.client;
+  }
+
+  getConnectionStatus() {
+    return this.isConnected;
+  }
+}
+
+export const grpcClient = new GrpcClient();
 
 export function createMessageRequest(userId, content, roomId) {
   const request = new MessageRequest();
