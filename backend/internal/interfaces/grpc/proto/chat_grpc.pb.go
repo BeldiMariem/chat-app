@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             v6.33.0
-// source: proto/chat.proto
+// source: chat.proto
 
 package proto
 
@@ -22,6 +22,9 @@ const (
 	ChatService_SendMessage_FullMethodName       = "/chat.ChatService/SendMessage"
 	ChatService_StreamMessages_FullMethodName    = "/chat.ChatService/StreamMessages"
 	ChatService_GetMessageHistory_FullMethodName = "/chat.ChatService/GetMessageHistory"
+	ChatService_Register_FullMethodName          = "/chat.ChatService/Register"
+	ChatService_Login_FullMethodName             = "/chat.ChatService/Login"
+	ChatService_ValidateToken_FullMethodName     = "/chat.ChatService/ValidateToken"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -31,6 +34,9 @@ type ChatServiceClient interface {
 	SendMessage(ctx context.Context, in *MessageRequest, opts ...grpc.CallOption) (*MessageResponse, error)
 	StreamMessages(ctx context.Context, in *StreamRequest, opts ...grpc.CallOption) (ChatService_StreamMessagesClient, error)
 	GetMessageHistory(ctx context.Context, in *HistoryRequest, opts ...grpc.CallOption) (*HistoryResponse, error)
+	Register(ctx context.Context, in *UserRequest, opts ...grpc.CallOption) (*AuthResponse, error)
+	Login(ctx context.Context, in *UserRequest, opts ...grpc.CallOption) (*AuthResponse, error)
+	ValidateToken(ctx context.Context, in *TokenRequest, opts ...grpc.CallOption) (*UserResponse, error)
 }
 
 type chatServiceClient struct {
@@ -91,6 +97,33 @@ func (c *chatServiceClient) GetMessageHistory(ctx context.Context, in *HistoryRe
 	return out, nil
 }
 
+func (c *chatServiceClient) Register(ctx context.Context, in *UserRequest, opts ...grpc.CallOption) (*AuthResponse, error) {
+	out := new(AuthResponse)
+	err := c.cc.Invoke(ctx, ChatService_Register_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) Login(ctx context.Context, in *UserRequest, opts ...grpc.CallOption) (*AuthResponse, error) {
+	out := new(AuthResponse)
+	err := c.cc.Invoke(ctx, ChatService_Login_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) ValidateToken(ctx context.Context, in *TokenRequest, opts ...grpc.CallOption) (*UserResponse, error) {
+	out := new(UserResponse)
+	err := c.cc.Invoke(ctx, ChatService_ValidateToken_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -98,6 +131,9 @@ type ChatServiceServer interface {
 	SendMessage(context.Context, *MessageRequest) (*MessageResponse, error)
 	StreamMessages(*StreamRequest, ChatService_StreamMessagesServer) error
 	GetMessageHistory(context.Context, *HistoryRequest) (*HistoryResponse, error)
+	Register(context.Context, *UserRequest) (*AuthResponse, error)
+	Login(context.Context, *UserRequest) (*AuthResponse, error)
+	ValidateToken(context.Context, *TokenRequest) (*UserResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -113,6 +149,15 @@ func (UnimplementedChatServiceServer) StreamMessages(*StreamRequest, ChatService
 }
 func (UnimplementedChatServiceServer) GetMessageHistory(context.Context, *HistoryRequest) (*HistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMessageHistory not implemented")
+}
+func (UnimplementedChatServiceServer) Register(context.Context, *UserRequest) (*AuthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
+}
+func (UnimplementedChatServiceServer) Login(context.Context, *UserRequest) (*AuthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
+}
+func (UnimplementedChatServiceServer) ValidateToken(context.Context, *TokenRequest) (*UserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateToken not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -184,6 +229,60 @@ func _ChatService_GetMessageHistory_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).Register(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_Register_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).Register(ctx, req.(*UserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).Login(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_Login_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).Login(ctx, req.(*UserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_ValidateToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ValidateToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ValidateToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ValidateToken(ctx, req.(*TokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -199,6 +298,18 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetMessageHistory",
 			Handler:    _ChatService_GetMessageHistory_Handler,
 		},
+		{
+			MethodName: "Register",
+			Handler:    _ChatService_Register_Handler,
+		},
+		{
+			MethodName: "Login",
+			Handler:    _ChatService_Login_Handler,
+		},
+		{
+			MethodName: "ValidateToken",
+			Handler:    _ChatService_ValidateToken_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -207,5 +318,5 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/chat.proto",
+	Metadata: "chat.proto",
 }

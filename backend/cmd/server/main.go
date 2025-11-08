@@ -11,8 +11,8 @@ import (
 
 	infraFirestore "chat-app/backend/internal/infrastructure/firestore"
 	"chat-app/backend/internal/interfaces/grpc/handlers"
+	pb "chat-app/backend/internal/interfaces/grpc/proto"
 	"chat-app/backend/internal/usecases"
-	pb "chat-app/backend/proto"
 )
 
 func main() {
@@ -33,8 +33,12 @@ func main() {
 	log.Println("Firestore client initialized successfully")
 
 	messageRepo := infraFirestore.NewMessageRepository(client)
-	messageUseCase := usecases.NewMessageUseCase(messageRepo)
-	chatHandler := handlers.NewChatHandler(messageUseCase)
+	userRepo := infraFirestore.NewUserRepository(client)
+
+	authUseCase := usecases.NewAuthUseCase(userRepo)
+	messageUseCase := usecases.NewMessageUseCase(messageRepo, authUseCase)
+
+	chatHandler := handlers.NewChatHandler(messageUseCase, authUseCase)
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {

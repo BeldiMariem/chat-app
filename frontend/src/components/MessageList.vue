@@ -1,7 +1,7 @@
 <template>
   <div class="messages" ref="messagesContainer">
     <div v-if="messages.length === 0 && !isConnected" class="no-messages">
-      Disconnected. Click "Connect" to join the chat.
+      Disconnected. Connect to join the chat.
     </div>
     
     <div v-else-if="messages.length === 0 && isConnected" class="no-messages">
@@ -15,7 +15,7 @@
       :class="{ 'own-message': message.userId === currentUserId }"
     >
       <div class="message-header">
-        <strong>{{ message.userId }}</strong>
+        <strong>{{ message.username }}</strong>
         <span class="timestamp">{{ formatTimestamp(message.timestamp) }}</span>
       </div>
       <div class="message-content">{{ message.content }}</div>
@@ -25,7 +25,6 @@
 
 <script setup>
 import { ref, watch, nextTick } from 'vue';
-import { formatTimestamp } from '../utils/formatters.js';
 
 const props = defineProps({
   messages: {
@@ -43,6 +42,27 @@ const props = defineProps({
 });
 
 const messagesContainer = ref(null);
+
+const formatTimestamp = (timestamp) => {
+  if (!timestamp || timestamp === '0001-01-01T00:00:00Z') {
+    return 'Just now';
+  }
+  
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      return 'Just now';
+    }
+    
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (error) {
+    console.error('Error formatting timestamp:', error);
+    return 'Just now';
+  }
+};
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -65,6 +85,7 @@ defineExpose({
 });
 </script>
 
+
 <style scoped>
 .messages {
   flex: 1;
@@ -72,6 +93,7 @@ defineExpose({
   padding: 20px;
   background: #f8f9fa;
   border-radius: 8px;
+  margin: 0 15px 15px 15px;
 }
 
 .message {
@@ -114,4 +136,6 @@ defineExpose({
   font-style: italic;
   font-size: 1.1em;
 }
+
+
 </style>
