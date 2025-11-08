@@ -162,43 +162,44 @@ export class ChatService {
         return Promise.resolve();
     }
 
-    async sendMessage(userId, content, roomId) {
-  console.log('🔍 chatService.sendMessage called with:', { userId, content, roomId });
-  
-  return new Promise((resolve, reject) => {
-    const request = createMessageRequest(userId, content, roomId);
-    
-    console.log('📦 Created request:', request);
-    console.log('🔧 Request serialized:', request.serializeBinary());
+    async sendMessage(userId, username, content, roomId) {
+        console.log('🔍 chatService.sendMessage called with:', { userId, username, content, roomId });
 
-    this.client.sendMessage(request, {}, (error, response) => {
-      console.log('📨 gRPC response received:', { error, response });
-      
-      if (error) {
-        console.error('❌ gRPC error:', error);
-        reject(new Error(`Failed to send message: ${error.message}`));
-      } else {
-        let result;
-        if (response instanceof Uint8Array) {
-          console.log('📊 Response is Uint8Array, parsing...');
-          result = this.parseMessageResponse(response);
-          console.log('📊 Parsed result:', result);
-        } else {
-          console.log('📊 Response is object:', response);
-          result = {
-            messageId: response.getMessageId(),
-            userId: response.getUserId(),
-            content: response.getContent(),
-            timestamp: response.getTimestamp(),
-            roomId: response.getRoomId()
-          };
-        }
-        console.log('✅ Message sent successfully, result:', result);
-        resolve(result);
-      }
-    });
-  });
-}
+        return new Promise((resolve, reject) => {
+            const request = createMessageRequest(userId, username, content, roomId);
+
+            console.log('📦 Created request:', request);
+            console.log('🔧 Request serialized:', request.serializeBinary());
+
+            this.client.sendMessage(request, {}, (error, response) => {
+                console.log('📨 gRPC response received:', { error, response });
+
+                if (error) {
+                    console.error('❌ gRPC error:', error);
+                    reject(new Error(`Failed to send message: ${error.message}`));
+                } else {
+                    let result;
+                    if (response instanceof Uint8Array) {
+                        console.log('📊 Response is Uint8Array, parsing...');
+                        result = this.parseMessageResponse(response);
+                        console.log('📊 Parsed result:', result);
+                    } else {
+                        console.log('📊 Response is object:', response);
+                        result = {
+                            messageId: response.getMessageId(),
+                            userId: response.getUserId(),
+                            username: response.getUsername(),
+                            content: response.getContent(),
+                            timestamp: response.getTimestamp(),
+                            roomId: response.getRoomId()
+                        };
+                    }
+                    console.log('✅ Message sent successfully, result:', result);
+                    resolve(result);
+                }
+            });
+        });
+    }
     async getMessageHistory(roomId, limit = 50) {
         return new Promise((resolve, reject) => {
             const request = createHistoryRequest(roomId, '', limit);
@@ -216,6 +217,7 @@ export class ChatService {
                         messages = messagesList.map(msg => ({
                             messageId: msg.getMessageId(),
                             userId: msg.getUserId(),
+                            username: msg.getUsername(),
                             content: msg.getContent(),
                             timestamp: msg.getTimestamp(),
                             roomId: msg.getRoomId()
@@ -243,6 +245,7 @@ export class ChatService {
                 messageData = {
                     messageId: response.getMessageId(),
                     userId: response.getUserId(),
+                    username: response.getUsername(),
                     content: response.getContent(),
                     timestamp: response.getTimestamp(),
                     roomId: response.getRoomId()
@@ -315,7 +318,7 @@ export class ChatService {
                     const varintResult = this.readVarint(bytes, offset);
                     if (!varintResult) break;
 
-                    if (fieldNumber === 4) { 
+                    if (fieldNumber === 4) {
                         result.success = varintResult.value !== 0;
                     }
                     offset = varintResult.newOffset;
@@ -373,7 +376,7 @@ export class ChatService {
                     const varintResult = this.readVarint(bytes, offset);
                     if (!varintResult) break;
 
-                    if (fieldNumber === 3) { 
+                    if (fieldNumber === 3) {
                         result.valid = varintResult.value !== 0;
                     }
                     offset = varintResult.newOffset;
@@ -391,61 +394,62 @@ export class ChatService {
     }
 
     parseMessageResponse(bytes) {
-        try {
-            const decoder = new TextDecoder();
-            let offset = 0;
-            const result = {};
+    try {
+        const decoder = new TextDecoder();
+        let offset = 0;
+        const result = {};
 
-            while (offset < bytes.length) {
-                const tagResult = this.readVarint(bytes, offset);
-                if (!tagResult) break;
+        while (offset < bytes.length) {
+            const tagResult = this.readVarint(bytes, offset);
+            if (!tagResult) break;
 
-                const { value: tag, newOffset: tagEnd } = tagResult;
-                const fieldNumber = tag >> 3;
-                const wireType = tag & 0x07;
-                offset = tagEnd;
+            const { value: tag, newOffset: tagEnd } = tagResult;
+            const fieldNumber = tag >> 3;
+            const wireType = tag & 0x07;
+            offset = tagEnd;
 
-                if (wireType === 2) {
-                    const lengthResult = this.readVarint(bytes, offset);
-                    if (!lengthResult) break;
+            if (wireType === 2) {
+                const lengthResult = this.readVarint(bytes, offset);
+                if (!lengthResult) break;
 
-                    const { value: length, newOffset: lengthEnd } = lengthResult;
-                    offset = lengthEnd;
+                const { value: length, newOffset: lengthEnd } = lengthResult;
+                offset = lengthEnd;
 
-                    if (offset + length > bytes.length) break;
+                if (offset + length > bytes.length) break;
 
-                    const stringBytes = bytes.slice(offset, offset + length);
-                    const stringValue = decoder.decode(stringBytes);
-                    offset += length;
+                const stringBytes = bytes.slice(offset, offset + length);
+                const stringValue = decoder.decode(stringBytes);
+                offset += length;
 
-                    const fieldMap = {
-                        1: 'messageId',
-                        2: 'userId',
-                        3: 'content',
-                        4: 'timestamp',
-                        5: 'roomId'
-                    };
+                const fieldMap = {
+                    1: 'messageId',
+                    2: 'userId',
+                    3: 'content',    
+                    4: 'timestamp',  
+                    5: 'roomId',     
+                    6: 'username'    
+                };
 
-                    const fieldName = fieldMap[fieldNumber];
-                    if (fieldName) {
-                        result[fieldName] = stringValue;
-                    }
-                } else if (wireType === 0) {
-                    const varintResult = this.readVarint(bytes, offset);
-                    if (!varintResult) break;
-                    offset = varintResult.newOffset;
-                } else {
-                    break;
+                const fieldName = fieldMap[fieldNumber];
+                if (fieldName) {
+                    result[fieldName] = stringValue;
                 }
+            } else if (wireType === 0) {
+                const varintResult = this.readVarint(bytes, offset);
+                if (!varintResult) break;
+                offset = varintResult.newOffset;
+            } else {
+                break;
             }
-
-            return result;
-
-        } catch (error) {
-            console.error('❌ Error parsing MessageResponse:', error);
-            return null;
         }
+
+        return result;
+
+    } catch (error) {
+        console.error('❌ Error parsing MessageResponse:', error);
+        return null;
     }
+}
 
     parseHistoryResponse(bytes) {
         try {

@@ -14,20 +14,23 @@ try {
   MessageRequest = class {
     constructor() {
       this.userId = '';
+      this.username = '';
       this.content = '';
       this.roomId = '';
     }
     setUserId(val) { this.userId = val; }
+    setUsername(val) { this.username = val; }
     setContent(val) { this.content = val; }
     setRoomId(val) { this.roomId = val; }
-    serializeBinary() { 
+    serializeBinary() {
       return this.serializeToBinary();
     }
     serializeToBinary() {
       const parts = [];
       if (this.userId) parts.push(createProtobufField(1, 2, this.userId));
-      if (this.content) parts.push(createProtobufField(2, 2, this.content));
-      if (this.roomId) parts.push(createProtobufField(3, 2, this.roomId));
+      if (this.username) parts.push(createProtobufField(2, 2, this.username));
+      if (this.content) parts.push(createProtobufField(3, 2, this.content));
+      if (this.roomId) parts.push(createProtobufField(4, 2, this.roomId)); 
       return concatenateArrays(parts);
     }
   };
@@ -37,7 +40,7 @@ try {
       this.roomId = '';
     }
     setRoomId(val) { this.roomId = val; }
-    serializeBinary() { 
+    serializeBinary() {
       return this.serializeToBinary();
     }
     serializeToBinary() {
@@ -56,14 +59,14 @@ try {
     setRoomId(val) { this.roomId = val; }
     setUserId(val) { this.userId = val; }
     setLimit(val) { this.limit = val; }
-    serializeBinary() { 
+    serializeBinary() {
       return this.serializeToBinary();
     }
     serializeToBinary() {
       const parts = [];
       if (this.roomId) parts.push(createProtobufField(1, 2, this.roomId));
       if (this.userId) parts.push(createProtobufField(2, 2, this.userId));
-      if (this.limit) parts.push(createProtobufField(3, 0, this.limit));
+      if (this.limit) parts.push(createProtobufField(4, 0, this.limit));
       return concatenateArrays(parts);
     }
   };
@@ -75,7 +78,7 @@ try {
     }
     setUsername(val) { this.username = val; }
     setPassword(val) { this.password = val; }
-    serializeBinary() { 
+    serializeBinary() {
       return this.serializeToBinary();
     }
     serializeToBinary() {
@@ -91,7 +94,7 @@ try {
       this.token = '';
     }
     setToken(val) { this.token = val; }
-    serializeBinary() { 
+    serializeBinary() {
       return this.serializeToBinary();
     }
     serializeToBinary() {
@@ -130,9 +133,10 @@ export class GrpcClient {
 
 export const grpcClient = new GrpcClient();
 
-export function createMessageRequest(userId, content, roomId) {
+export function createMessageRequest(userId, username, content, roomId) {
   const request = new MessageRequest();
   request.setUserId(userId || '');
+  request.setUsername(username || '');
   request.setContent(content || '');
   request.setRoomId(roomId || 'general');
   return request;
@@ -170,31 +174,31 @@ export function createTokenRequest(token) {
 function createProtobufField(fieldNumber, wireType, value) {
   const tag = (fieldNumber << 3) | wireType;
   const tagBytes = encodeVarint(tag);
-  
+
   let valueBytes;
-  if (wireType === 2) { 
+  if (wireType === 2) {
     const stringBytes = new TextEncoder().encode(String(value));
     const lengthBytes = encodeVarint(stringBytes.length);
     valueBytes = new Uint8Array(lengthBytes.length + stringBytes.length);
     valueBytes.set(lengthBytes, 0);
     valueBytes.set(stringBytes, lengthBytes.length);
-  } else if (wireType === 0) { 
+  } else if (wireType === 0) {
     valueBytes = encodeVarint(Number(value));
   } else {
     valueBytes = new Uint8Array(0);
   }
-  
+
   const result = new Uint8Array(tagBytes.length + valueBytes.length);
   result.set(tagBytes, 0);
   result.set(valueBytes, tagBytes.length);
-  
+
   return result;
 }
 
 function encodeVarint(value) {
   const bytes = [];
   let num = value;
-  
+
   do {
     let byte = num & 0x7F;
     num = num >>> 7;
@@ -203,7 +207,7 @@ function encodeVarint(value) {
     }
     bytes.push(byte);
   } while (num !== 0);
-  
+
   return new Uint8Array(bytes);
 }
 
@@ -211,11 +215,11 @@ function concatenateArrays(arrays) {
   const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
   const result = new Uint8Array(totalLength);
   let offset = 0;
-  
+
   for (const arr of arrays) {
     result.set(arr, offset);
     offset += arr.length;
   }
-  
+
   return result;
 }
