@@ -7,6 +7,8 @@ option go_package = "./proto";
 service ChatService {
   rpc SendMessage (MessageRequest) returns (MessageResponse);
   rpc StreamMessages (StreamRequest) returns (stream MessageResponse);
+  rpc GetMessageHistory (HistoryRequest) returns (HistoryResponse); 
+
 }
 
 message MessageRequest {
@@ -25,4 +27,14 @@ message MessageResponse {
 
 message StreamRequest {
   string room_id = 1;
+}
+
+message HistoryRequest {
+  string room_id = 1;
+  string user_id = 2; 
+  int32 limit = 3;    
+}
+
+message HistoryResponse {
+  repeated MessageResponse messages = 1;
 }

@@ -13,7 +13,12 @@
         <button @click="toggleConnection" class="connect-btn">
           {{ isConnected ? 'Disconnect' : 'Connect' }}
         </button>
+        <button @click="loadMessageHistory" class="history-btn" :disabled="!isConnected">
+          📚 Load History
+        </button>
       </div>
+
+      <div class="status">{{ status }}</div>
 
       <div class="messages" ref="messagesContainer">
         <div v-for="message in messages" :key="message.messageId" class="message"
@@ -46,7 +51,7 @@
 </template>
 
 <script>
-import { client, createMessageRequest, createStreamRequest } from './proto/client.js';
+import { client, createHistoryRequest, createMessageRequest, createStreamRequest } from './proto/client.js';
 
 export default {
   name: 'ChatApp',
@@ -57,7 +62,8 @@ export default {
       userId: '',
       roomId: 'general',
       isConnected: false,
-      stream: null
+      stream: null,
+      status: 'Ready to connect'
     };
   },
   mounted() {
@@ -75,20 +81,24 @@ export default {
       }
     },
 
-    connectToStream() {
+    async connectToStream() {
       if (!this.validateConnectionParams()) {
         return;
       }
 
       try {
+        this.status = '🔄 Connecting to gRPC backend...';
+
+        await this.loadMessageHistory();
 
         const request = createStreamRequest(this.roomId);
 
         this.setupStreamHandlers(request);
         this.isConnected = true;
+        this.status = '✅ Connected to chat';
 
       } catch (error) {
-        alert('Failed to connect: ' + error.message);
+        this.status = 'Connection error: ' + error.message;
         this.isConnected = false;
       }
     },
@@ -109,44 +119,54 @@ export default {
       });
 
       this.stream.on('status', (status) => {
-        console.log('📊 Stream status:', status);
       });
     },
 
     handleStreamData(response) {
-
       try {
-        const messageData = this.parseStreamResponse(response);
+
+        let messageData;
+
+        if (response instanceof Uint8Array) {
+          messageData = this.parseMessageResponse(response);
+        } else if (response.getUserId) {
+          messageData = {
+            messageId: response.getMessageId(),
+            userId: response.getUserId(),
+            content: response.getContent(),
+            timestamp: response.getTimestamp(),
+            roomId: response.getRoomId()
+          };
+        } else {
+          return;
+        }
+
 
         if (messageData && messageData.userId && messageData.content) {
           const isDuplicate = this.messages.some(msg =>
-            msg.messageId === messageData.messageId ||
-            (msg.userId === messageData.userId &&
-              msg.content === messageData.content &&
-              Math.abs(new Date(msg.timestamp) - new Date(messageData.timestamp)) < 1000)
+            msg.messageId === messageData.messageId
           );
 
           if (!isDuplicate) {
             this.messages.push(messageData);
             this.scrollToBottom();
-          } else {
-            console.log('🔍 Duplicate message skipped');
           }
         }
+
       } catch (parseError) {
-        console.error('❌ Error parsing message:', parseError, response);
+        console.error('❌ Error parsing stream message:', parseError, response);
       }
     },
 
     handleStreamError(error) {
       this.isConnected = false;
-
-      const errorMessage = this.getStreamErrorMessage(error);
-      alert(errorMessage);
+      this.status = 'Stream error: ' + error.message;
+      console.error('❌ Stream error:', error);
     },
 
     handleStreamEnd() {
       this.isConnected = false;
+      this.status = 'Stream ended';
     },
 
     disconnectFromStream() {
@@ -155,6 +175,7 @@ export default {
         this.stream = null;
       }
       this.isConnected = false;
+      this.status = 'Disconnected';
     },
 
     async sendMessage() {
@@ -163,7 +184,7 @@ export default {
       }
 
       try {
-
+        this.status = '📤 Sending message...';
         const request = createMessageRequest(this.userId, this.newMessage, this.roomId);
 
         const response = await this.sendMessageRequest(request);
@@ -181,9 +202,11 @@ export default {
         }
 
         this.newMessage = '';
+        this.status = '✅ Message sent';
 
       } catch (error) {
-        alert('Failed to send message: ' + error.message);
+        console.error('❌ Failed to send message:', error);
+        this.status = 'Failed to send message: ' + error.message;
       }
     },
 
@@ -193,13 +216,137 @@ export default {
           if (error) {
             reject(error);
           } else {
-
             if (response instanceof Uint8Array) {
               const parsedResponse = this.parseMessageResponse(response);
               resolve(parsedResponse);
             } else {
               resolve(response);
             }
+          }
+        });
+      });
+    },
+
+    async loadMessageHistory() {
+      try {
+
+        const request = createHistoryRequest(this.roomId, this.userId, 50);
+
+        const response = await this.getMessageHistory(request);
+
+        if (response instanceof Uint8Array) {
+          const parsedResponse = this.parseHistoryResponse(response);
+
+          if (parsedResponse && parsedResponse.messages) {
+            this.messages = parsedResponse.messages;
+            this.status = `✅ Loaded ${this.messages.length} real messages`;
+            this.scrollToBottom();
+          } else {
+            this.addRealTestMessages();
+          }
+        } else if (response && response.getMessagesList) {
+          const messagesList = response.getMessagesList();
+          this.messages = messagesList.map(msg => ({
+            messageId: msg.getMessageId(),
+            userId: msg.getUserId(),
+            content: msg.getContent(),
+            timestamp: msg.getTimestamp(),
+            roomId: msg.getRoomId()
+          }));
+          this.status = `✅ Loaded ${this.messages.length} real messages`;
+          this.scrollToBottom();
+        } else {
+          this.addRealTestMessages();
+        }
+
+      } catch (error) {
+        console.error('❌ Failed to load message history:', error);
+        this.status = 'Error loading history: ' + error.message;
+        this.addRealTestMessages();
+      }
+    },
+    parseHistoryResponse(bytes) {
+      try {
+
+        const decoder = new TextDecoder();
+        let offset = 0;
+        const messages = [];
+
+        while (offset < bytes.length) {
+          const tagResult = this.readVarint(bytes, offset);
+          if (!tagResult) break;
+
+          const { value: tag, newOffset: tagEnd } = tagResult;
+          const fieldNumber = tag >> 3;
+          const wireType = tag & 0x07;
+          offset = tagEnd;
+
+          if (fieldNumber === 1 && wireType === 2) {
+            const lengthResult = this.readVarint(bytes, offset);
+            if (!lengthResult) break;
+
+            const { value: messageLength, newOffset: lengthEnd } = lengthResult;
+            offset = lengthEnd;
+
+            if (offset + messageLength > bytes.length) {
+              break;
+            }
+
+            const messageBytes = bytes.slice(offset, offset + messageLength);
+            offset += messageLength;
+
+            const message = this.parseMessageResponse(messageBytes);
+            if (message && message.userId) {
+              messages.push(message);
+            }
+          } else {
+            if (wireType === 2) {
+              const lengthResult = this.readVarint(bytes, offset);
+              if (!lengthResult) break;
+              offset = lengthEnd + lengthResult.value;
+            } else if (wireType === 0) {
+              const varintResult = this.readVarint(bytes, offset);
+              if (!varintResult) break;
+              offset = varintResult.newOffset;
+            } else {
+              break;
+            }
+          }
+        }
+
+        return { messages };
+
+      } catch (error) {
+        console.error('❌ Error parsing HistoryResponse:', error);
+        return { messages: [] };
+      }
+    },
+
+    addRealTestMessages() {
+      if (this.messages.length === 0) {
+        const testMessages = [
+          {
+            messageId: 'test-' + Date.now(),
+            userId: 'system',
+            content: 'No historical messages found. Start chatting!',
+            timestamp: new Date().toISOString(),
+            roomId: this.roomId
+          }
+        ];
+        this.messages = testMessages;
+        this.status = 'No historical messages found';
+        this.scrollToBottom();
+      }
+    },
+
+    getMessageHistory(request) {
+      return new Promise((resolve, reject) => {
+        client.getMessageHistory(request, {}, (error, response) => {
+          if (error) {
+            console.error('❌ Get message history error:', error);
+            reject(error);
+          } else {
+            resolve(response);
           }
         });
       });
@@ -241,15 +388,28 @@ export default {
             const { value: length, newOffset: lengthEnd } = lengthResult;
             offset = lengthEnd;
 
-            if (offset + length > bytes.length) {
-              break;
-            }
+            if (offset + length > bytes.length) break;
 
             const stringBytes = bytes.slice(offset, offset + length);
             const stringValue = decoder.decode(stringBytes);
             offset += length;
 
-            this.mapFieldToResult(fieldNumber, stringValue, result);
+            const fieldMap = {
+              1: 'messageId',
+              2: 'userId',
+              3: 'content',
+              4: 'timestamp',
+              5: 'roomId'
+            };
+
+            const fieldName = fieldMap[fieldNumber];
+            if (fieldName) {
+              result[fieldName] = stringValue;
+            }
+          } else if (wireType === 0) { 
+            const varintResult = this.readVarint(bytes, offset);
+            if (!varintResult) break;
+            offset = varintResult.newOffset;
           } else {
             break;
           }
@@ -258,14 +418,14 @@ export default {
         return result;
 
       } catch (error) {
-        return this.createErrorResponse();
+        console.error('❌ Error parsing MessageResponse:', error);
+        return null;
       }
     },
 
+
     readVarint(bytes, offset) {
-      if (offset >= bytes.length) {
-        return null;
-      }
+      if (offset >= bytes.length) return null;
 
       let value = 0;
       let shift = 0;
@@ -273,16 +433,11 @@ export default {
       let currentOffset = offset;
 
       do {
-        if (currentOffset >= bytes.length) {
-          return null;
-        }
+        if (currentOffset >= bytes.length) return null;
         byte = bytes[currentOffset++];
         value |= (byte & 0x7F) << shift;
         shift += 7;
-
-        if (shift > 28) { 
-          return null;
-        }
+        if (shift > 28) return null;
       } while (byte & 0x80);
 
       return { value, newOffset: currentOffset };
@@ -307,7 +462,7 @@ export default {
 
     validateConnectionParams() {
       if (!this.userId?.trim() || !this.roomId?.trim()) {
-        alert('Please enter both username and room ID');
+        this.status = 'Please enter both username and room ID';
         return false;
       }
       return true;
@@ -315,16 +470,6 @@ export default {
 
     canSendMessage() {
       return this.newMessage.trim() && this.userId && this.isConnected;
-    },
-
-    getStreamErrorMessage(error) {
-      const errorMap = {
-        2: 'Backend unavailable. Make sure your Go server is running on port 50051.',
-        14: 'No route to backend. Check if gRPC proxy is running on port 8080.',
-        default: 'Stream error: ' + error.message
-      };
-
-      return errorMap[error.code] || errorMap.default;
     },
 
     createErrorResponse() {
@@ -335,18 +480,6 @@ export default {
         timestamp: new Date().toISOString(),
         roomId: this.roomId
       };
-    },
-
-    addSystemMessage(content) {
-      const systemMessage = {
-        messageId: 'system-' + Date.now(),
-        userId: 'system',
-        content: content,
-        timestamp: new Date().toISOString(),
-        roomId: this.roomId
-      };
-      this.messages.push(systemMessage);
-      this.scrollToBottom();
     },
 
     scrollToBottom() {
@@ -386,6 +519,33 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   padding: 20px;
+}
+
+.status {
+  padding: 8px 15px;
+  background: #e9ecef;
+  text-align: center;
+  font-size: 0.9em;
+  color: #495057;
+}
+
+.history-btn {
+  padding: 10px 16px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.history-btn:hover:not(:disabled) {
+  background: #218838;
+}
+
+.history-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
 }
 
 .chat-app {

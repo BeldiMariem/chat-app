@@ -20,7 +20,6 @@ type server struct {
 }
 
 func (s *server) SendMessage(ctx context.Context, req *pb.MessageRequest) (*pb.MessageResponse, error) {
-	// Create message data with proper Firestore timestamp
 	messageData := map[string]interface{}{
 		"user_id":   req.GetUserId(),
 		"content":   req.GetContent(),
@@ -30,7 +29,6 @@ func (s *server) SendMessage(ctx context.Context, req *pb.MessageRequest) (*pb.M
 
 	log.Printf("Storing message in Firestore: %+v", messageData)
 
-	// Add document to Firestore
 	docRef, _, err := s.firestoreClient.Collection("messages").Add(ctx, messageData)
 	if err != nil {
 		log.Printf("Error storing message: %v", err)
@@ -39,7 +37,6 @@ func (s *server) SendMessage(ctx context.Context, req *pb.MessageRequest) (*pb.M
 
 	log.Printf("Message stored with ID: %s", docRef.ID)
 
-	// Return response
 	return &pb.MessageResponse{
 		MessageId: docRef.ID,
 		UserId:    req.GetUserId(),
@@ -54,7 +51,6 @@ func (s *server) StreamMessages(req *pb.StreamRequest, stream pb.ChatService_Str
 
 	log.Printf("Starting message stream for room: %s", req.GetRoomId())
 
-	// Listen for real-time updates from Firestore
 	iter := s.firestoreClient.Collection("messages").
 		Where("room_id", "==", req.GetRoomId()).
 		OrderBy("timestamp", firestore.Asc).
@@ -80,7 +76,6 @@ func (s *server) StreamMessages(req *pb.StreamRequest, stream pb.ChatService_Str
 					continue
 				}
 
-				// Extract timestamp properly
 				var timestampStr string
 				if ts, ok := data["timestamp"].(time.Time); ok {
 					timestampStr = ts.Format(time.RFC3339)
@@ -88,7 +83,6 @@ func (s *server) StreamMessages(req *pb.StreamRequest, stream pb.ChatService_Str
 					timestampStr = time.Now().Format(time.RFC3339)
 				}
 
-				// Convert to gRPC response
 				resp := &pb.MessageResponse{
 					MessageId: doc.Ref.ID,
 					UserId:    data["user_id"].(string),
@@ -107,12 +101,53 @@ func (s *server) StreamMessages(req *pb.StreamRequest, stream pb.ChatService_Str
 		}
 	}
 }
+func (s *server) GetMessageHistory(ctx context.Context, req *pb.HistoryRequest) (*pb.HistoryResponse, error) {
+	log.Printf("Fetching message history for room: %s", req.GetRoomId())
 
+	iter := s.firestoreClient.Collection("messages").
+		Where("room_id", "==", req.GetRoomId()).
+		Limit(50).
+		Documents(ctx)
+
+	var messages []*pb.MessageResponse
+
+	docs, err := iter.GetAll()
+	if err != nil {
+		log.Printf("Error fetching history: %v", err)
+		return nil, err
+	}
+
+	for i := len(docs) - 1; i >= 0; i-- {
+		doc := docs[i]
+		var data map[string]interface{}
+		if err := doc.DataTo(&data); err != nil {
+			log.Printf("Error parsing document: %v", err)
+			continue
+		}
+
+		var timestampStr string
+		if ts, ok := data["timestamp"].(time.Time); ok {
+			timestampStr = ts.Format(time.RFC3339)
+		} else {
+			timestampStr = time.Now().Format(time.RFC3339)
+		}
+
+		message := &pb.MessageResponse{
+			MessageId: doc.Ref.ID,
+			UserId:    data["user_id"].(string),
+			Content:   data["content"].(string),
+			Timestamp: timestampStr,
+			RoomId:    data["room_id"].(string),
+		}
+		messages = append(messages, message)
+	}
+
+	log.Printf("Returning %d historical messages", len(messages))
+	return &pb.HistoryResponse{Messages: messages}, nil
+}
 func main() {
-	// Firebase setup
 	ctx := context.Background()
 
-	// Use service account key file
 	opt := option.WithCredentialsFile("firebase-service-account.json")
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
@@ -127,7 +162,6 @@ func main() {
 
 	log.Println("Firestore client initialized successfully")
 
-	// gRPC server
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)

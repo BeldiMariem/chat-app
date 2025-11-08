@@ -1,66 +1,120 @@
 import * as grpcWeb from 'grpc-web';
-import { ChatServiceClient } from './chat_grpc_web_pb.js';
+import { ChatServiceClient, ChatServicePromiseClient } from './chat_grpc_web_pb.js';
 
-export const client = new ChatServiceClient('http://localhost:8081', null, null);
+let MessageRequest, StreamRequest, HistoryRequest;
 
-export function createMessageRequest(userId, content, roomId) {
-  return createManualRequest('MessageRequest', { 
-    userId: String(userId || ''), 
-    content: String(content || ''), 
-    roomId: String(roomId || 'general') 
-  });
-}
+try {
+  const chatPb = require('./chat_pb.js');
+  MessageRequest = chatPb.MessageRequest;
+  StreamRequest = chatPb.StreamRequest;
+  HistoryRequest = chatPb.HistoryRequest;
+} catch (e) {
+  
+  MessageRequest = class {
+    constructor() {
+      this.userId = '';
+      this.content = '';
+      this.roomId = '';
+    }
+    setUserId(val) { this.userId = val; }
+    setContent(val) { this.content = val; }
+    setRoomId(val) { this.roomId = val; }
+    serializeBinary() { 
+      return this.serializeToBinary();
+    }
+    serializeToBinary() {
+      const parts = [];
+      if (this.userId) parts.push(createProtobufField(1, 2, this.userId));
+      if (this.content) parts.push(createProtobufField(2, 2, this.content));
+      if (this.roomId) parts.push(createProtobufField(3, 2, this.roomId));
+      return concatenateArrays(parts);
+    }
+  };
 
-export function createStreamRequest(roomId) {
-  return createManualRequest('StreamRequest', { 
-    roomId: String(roomId || 'general') 
-  });
-}
+  StreamRequest = class {
+    constructor() {
+      this.roomId = '';
+    }
+    setRoomId(val) { this.roomId = val; }
+    serializeBinary() { 
+      return this.serializeToBinary();
+    }
+    serializeToBinary() {
+      const parts = [];
+      if (this.roomId) parts.push(createProtobufField(1, 2, this.roomId));
+      return concatenateArrays(parts);
+    }
+  };
 
-function createManualRequest(type, data) {
-  return {
-    serializeBinary: () => {
-      let result;
-      
-      if (type === 'StreamRequest' && data.roomId) {
-        result = createStringField(1, data.roomId);
-      } else if (type === 'MessageRequest') {
-        const parts = [];
-        
-        if (data.userId) {
-          parts.push(createStringField(1, data.userId));
-        }
-        if (data.content) {
-          parts.push(createStringField(2, data.content));
-        }
-        if (data.roomId) {
-          parts.push(createStringField(3, data.roomId));
-        }
-        
-        result = concatenateArrays(parts);
-      } else {
-        result = new Uint8Array(0);
-      }
-      
-      return result;
-    },
-    
-    toObject: () => data
+  HistoryRequest = class {
+    constructor() {
+      this.roomId = '';
+      this.userId = '';
+      this.limit = 0;
+    }
+    setRoomId(val) { this.roomId = val; }
+    setUserId(val) { this.userId = val; }
+    setLimit(val) { this.limit = val; }
+    serializeBinary() { 
+      return this.serializeToBinary();
+    }
+    serializeToBinary() {
+      const parts = [];
+      if (this.roomId) parts.push(createProtobufField(1, 2, this.roomId));
+      if (this.userId) parts.push(createProtobufField(2, 2, this.userId));
+      if (this.limit) parts.push(createProtobufField(3, 0, this.limit));
+      return concatenateArrays(parts);
+    }
   };
 }
 
-function createStringField(fieldNumber, value) {
-  const valueBytes = new TextEncoder().encode(String(value));
-  
-  const tag = (fieldNumber << 3) | 2;
+export const client = new ChatServiceClient('http://localhost:8081', null, null);
+export const promiseClient = new ChatServicePromiseClient('http://localhost:8081', null, null);
+
+export function createMessageRequest(userId, content, roomId) {
+  const request = new MessageRequest();
+  request.setUserId(userId || '');
+  request.setContent(content || '');
+  request.setRoomId(roomId || 'general');
+  return request;
+}
+
+export function createStreamRequest(roomId) {
+  const request = new StreamRequest();
+  request.setRoomId(roomId || 'general');
+  return request;
+}
+
+export function createHistoryRequest(roomId, userId = '', limit = 50) {
+  const request = new HistoryRequest();
+  request.setRoomId(roomId || 'general');
+  if (userId) {
+    request.setUserId(userId);
+  }
+  request.setLimit(limit);
+  return request;
+}
+
+function createProtobufField(fieldNumber, wireType, value) {
+  const tag = (fieldNumber << 3) | wireType;
   const tagBytes = encodeVarint(tag);
   
-  const lengthBytes = encodeVarint(valueBytes.length);
+  let valueBytes;
+  if (wireType === 2) { 
+    const stringBytes = new TextEncoder().encode(String(value));
+    const lengthBytes = encodeVarint(stringBytes.length);
+    valueBytes = new Uint8Array(lengthBytes.length + stringBytes.length);
+    valueBytes.set(lengthBytes, 0);
+    valueBytes.set(stringBytes, lengthBytes.length);
+  } else if (wireType === 0) { 
+    valueBytes = encodeVarint(Number(value));
+  } else {
+    valueBytes = new Uint8Array(0);
+  }
   
-  const result = new Uint8Array(tagBytes.length + lengthBytes.length + valueBytes.length);
+  const result = new Uint8Array(tagBytes.length + valueBytes.length);
   result.set(tagBytes, 0);
-  result.set(lengthBytes, tagBytes.length);
-  result.set(valueBytes, tagBytes.length + lengthBytes.length);
+  result.set(valueBytes, tagBytes.length);
   
   return result;
 }
