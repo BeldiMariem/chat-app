@@ -4,7 +4,7 @@
       v-model="message"
       @keyup.enter="sendMessage"
       placeholder="Type your message..."
-      :disabled="!isConnected || !userId || isLoading"
+      :disabled="!isConnected || isLoading"
       class="message-input"
     />
     <button
@@ -26,10 +26,6 @@ const props = defineProps({
     type: Boolean,
     required: true
   },
-  userId: {
-    type: String,
-    required: true
-  },
   isLoading: {
     type: Boolean,
     default: false
@@ -41,7 +37,7 @@ const emit = defineEmits(['send-message']);
 const message = ref('');
 
 const canSend = computed(() => {
-  return message.value.trim() && props.isConnected && props.userId && !props.isLoading;
+  return message.value.trim() && props.isConnected && !props.isLoading;
 });
 
 const sendMessage = () => {

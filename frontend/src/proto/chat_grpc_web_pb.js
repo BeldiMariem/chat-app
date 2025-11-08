@@ -9,6 +9,57 @@ export class ChatServiceClient {
     this.hostname_ = hostname.replace(/\/+$/, '');
   }
 
+  register(request, metadata, callback) {
+    if (arguments.length === 2) {
+      callback = arguments[1];
+      metadata = {};
+    }
+
+    console.log('👤 Registering user...');
+    
+    return this.client_.rpcCall(
+      `${this.hostname_}/chat.ChatService/Register`,
+      request,
+      metadata || {},
+      methodDescriptor_ChatService_Register,
+      callback
+    );
+  }
+
+  login(request, metadata, callback) {
+    if (arguments.length === 2) {
+      callback = arguments[1];
+      metadata = {};
+    }
+
+    console.log('🔐 Logging in user...');
+    
+    return this.client_.rpcCall(
+      `${this.hostname_}/chat.ChatService/Login`,
+      request,
+      metadata || {},
+      methodDescriptor_ChatService_Login,
+      callback
+    );
+  }
+
+  validateToken(request, metadata, callback) {
+    if (arguments.length === 2) {
+      callback = arguments[1];
+      metadata = {};
+    }
+
+    console.log('🔍 Validating token...');
+    
+    return this.client_.rpcCall(
+      `${this.hostname_}/chat.ChatService/ValidateToken`,
+      request,
+      metadata || {},
+      methodDescriptor_ChatService_ValidateToken,
+      callback
+    );
+  }
+
   sendMessage(request, metadata, callback) {
     if (arguments.length === 2) {
       callback = arguments[1];
@@ -60,6 +111,42 @@ export class ChatServicePromiseClient {
     this.client_ = new ChatServiceClient(hostname, credentials, options);
   }
 
+  register(request, metadata) {
+    return new Promise((resolve, reject) => {
+      this.client_.register(request, metadata, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
+  login(request, metadata) {
+    return new Promise((resolve, reject) => {
+      this.client_.login(request, metadata, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
+  validateToken(request, metadata) {
+    return new Promise((resolve, reject) => {
+      this.client_.validateToken(request, metadata, (error, response) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
   sendMessage(request, metadata) {
     return new Promise((resolve, reject) => {
       this.client_.sendMessage(request, metadata, (error, response) => {
@@ -89,8 +176,8 @@ export class ChatServicePromiseClient {
   }
 }
 
-const methodDescriptor_ChatService_SendMessage = new grpcWeb.MethodDescriptor(
-  '/chat.ChatService/SendMessage',
+const methodDescriptor_ChatService_Register = new grpcWeb.MethodDescriptor(
+  '/chat.ChatService/Register',
   grpcWeb.MethodType.UNARY,
   Object,
   Object,
@@ -101,6 +188,59 @@ const methodDescriptor_ChatService_SendMessage = new grpcWeb.MethodDescriptor(
     return new Uint8Array();
   },
   function(responseBytes) {
+    return responseBytes; 
+  }
+);
+
+const methodDescriptor_ChatService_Login = new grpcWeb.MethodDescriptor(
+  '/chat.ChatService/Login',
+  grpcWeb.MethodType.UNARY,
+  Object,
+  Object,
+  function(request) {
+    if (typeof request.serializeBinary === 'function') {
+      return request.serializeBinary();
+    }
+    return new Uint8Array();
+  },
+  function(responseBytes) {
+    return responseBytes; 
+  }
+);
+
+const methodDescriptor_ChatService_ValidateToken = new grpcWeb.MethodDescriptor(
+  '/chat.ChatService/ValidateToken',
+  grpcWeb.MethodType.UNARY,
+  Object,
+  Object,
+  function(request) {
+    if (typeof request.serializeBinary === 'function') {
+      return request.serializeBinary();
+    }
+    return new Uint8Array();
+  },
+  function(responseBytes) {
+    return responseBytes; 
+  }
+);
+
+const methodDescriptor_ChatService_SendMessage = new grpcWeb.MethodDescriptor(
+  '/chat.ChatService/SendMessage',
+  grpcWeb.MethodType.UNARY,
+  Object,
+  Object,
+  function(request) {
+    console.log('🔧 Serializing SendMessage request:', request);
+    if (typeof request.serializeBinary === 'function') {
+      const result = request.serializeBinary();
+      console.log('🔧 Serialized bytes length:', result.length);
+      return result;
+    }
+    console.warn('⚠️ Request does not have serializeBinary method');
+    return new Uint8Array();
+  },
+  function(responseBytes) {
+    console.log('🔧 Deserializing SendMessage response, bytes length:', responseBytes.length);
     return responseBytes;
   }
 );
@@ -117,7 +257,7 @@ const methodDescriptor_ChatService_StreamMessages = new grpcWeb.MethodDescriptor
     return new Uint8Array();
   },
   function(responseBytes) {
-    return responseBytes;
+    return responseBytes; 
   }
 );
 
@@ -133,6 +273,6 @@ const methodDescriptor_ChatService_GetMessageHistory = new grpcWeb.MethodDescrip
     return new Uint8Array();
   },
   function(responseBytes) {
-    return responseBytes;
+    return responseBytes; 
   }
 );

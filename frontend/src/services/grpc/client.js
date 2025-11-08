@@ -1,13 +1,15 @@
 import * as grpcWeb from 'grpc-web';
 import { ChatServiceClient } from '../../proto/chat_grpc_web_pb.js';
 
-let MessageRequest, StreamRequest, HistoryRequest;
+let MessageRequest, StreamRequest, HistoryRequest, UserRequest, TokenRequest;
 
 try {
   const chatPb = require('../../proto/chat_pb.js');
   MessageRequest = chatPb.MessageRequest;
   StreamRequest = chatPb.StreamRequest;
   HistoryRequest = chatPb.HistoryRequest;
+  UserRequest = chatPb.UserRequest;
+  TokenRequest = chatPb.TokenRequest;
 } catch (e) {
   MessageRequest = class {
     constructor() {
@@ -65,6 +67,39 @@ try {
       return concatenateArrays(parts);
     }
   };
+
+  UserRequest = class {
+    constructor() {
+      this.username = '';
+      this.password = '';
+    }
+    setUsername(val) { this.username = val; }
+    setPassword(val) { this.password = val; }
+    serializeBinary() { 
+      return this.serializeToBinary();
+    }
+    serializeToBinary() {
+      const parts = [];
+      if (this.username) parts.push(createProtobufField(1, 2, this.username));
+      if (this.password) parts.push(createProtobufField(2, 2, this.password));
+      return concatenateArrays(parts);
+    }
+  };
+
+  TokenRequest = class {
+    constructor() {
+      this.token = '';
+    }
+    setToken(val) { this.token = val; }
+    serializeBinary() { 
+      return this.serializeToBinary();
+    }
+    serializeToBinary() {
+      const parts = [];
+      if (this.token) parts.push(createProtobufField(1, 2, this.token));
+      return concatenateArrays(parts);
+    }
+  };
 }
 
 export const client = new ChatServiceClient('http://localhost:8081', null, null);
@@ -116,6 +151,19 @@ export function createHistoryRequest(roomId, userId = '', limit = 50) {
     request.setUserId(userId);
   }
   request.setLimit(limit);
+  return request;
+}
+
+export function createUserRequest(username, password) {
+  const request = new UserRequest();
+  request.setUsername(username || '');
+  request.setPassword(password || '');
+  return request;
+}
+
+export function createTokenRequest(token) {
+  const request = new TokenRequest();
+  request.setToken(token || '');
   return request;
 }
 

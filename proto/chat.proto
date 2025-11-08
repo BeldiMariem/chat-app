@@ -4,35 +4,64 @@ package chat;
 
 option go_package = "./proto";
 
-service ChatService {
-  rpc SendMessage (MessageRequest) returns (MessageResponse);
-  rpc StreamMessages (StreamRequest) returns (stream MessageResponse);
-  rpc GetMessageHistory (HistoryRequest) returns (HistoryResponse); 
 
+service ChatService {
+  rpc SendMessage(MessageRequest) returns (MessageResponse);
+  rpc StreamMessages(StreamRequest) returns (stream MessageResponse);
+  rpc GetMessageHistory(HistoryRequest) returns (HistoryResponse);
+  
+  rpc Register(UserRequest) returns (AuthResponse);
+  rpc Login(UserRequest) returns (AuthResponse);
+  rpc ValidateToken(TokenRequest) returns (UserResponse);
+}
+
+message UserRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message TokenRequest {
+  string token = 1;
+}
+
+message AuthResponse {
+  string token = 1;
+  string user_id = 2;
+  string username = 3;
+  bool success = 4;
+  string error = 5;
+}
+
+message UserResponse {
+  string user_id = 1;
+  string username = 2;
+  bool valid = 3;
 }
 
 message MessageRequest {
-  string user_id = 1;
+  string user_id = 1;  
   string content = 2;
   string room_id = 3;
 }
 
 message MessageResponse {
   string message_id = 1;
-  string user_id = 2;
+  string user_id = 2;  
   string content = 3;
   string timestamp = 4;
   string room_id = 5;
+  string username = 6; 
 }
 
 message StreamRequest {
   string room_id = 1;
+  string token = 2; 
 }
 
 message HistoryRequest {
   string room_id = 1;
-  string user_id = 2; 
-  int32 limit = 3;    
+  int32 limit = 2;
+  string token = 3; 
 }
 
 message HistoryResponse {
