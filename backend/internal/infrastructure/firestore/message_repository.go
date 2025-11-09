@@ -68,6 +68,7 @@ func (r *MessageRepositoryImpl) StreamByRoomID(ctx context.Context, roomID strin
 
 	go func() {
 		defer close(messageChan)
+		log.Printf("🔥 Starting Firestore stream for room: %s", roomID)
 
 		iter := r.client.Collection("messages").
 			Where("room_id", "==", roomID).
@@ -78,24 +79,29 @@ func (r *MessageRepositoryImpl) StreamByRoomID(ctx context.Context, roomID strin
 			snap, err := iter.Next()
 			if err != nil {
 				if status.Code(err) == codes.Canceled {
-					log.Println("Stream context canceled")
+					log.Println("🔚 Firestore stream context canceled")
 					return
 				}
-				log.Printf("Stream error: %v", err)
+				log.Printf("❌ Firestore stream error: %v", err)
 				return
 			}
 
 			if snap == nil {
+				log.Println("⚠️ Firestore snapshot is nil")
 				continue
 			}
 
+			log.Printf("📊 Firestore snapshot received with %d changes", len(snap.Changes))
+
 			for _, change := range snap.Changes {
+				log.Printf("🔄 Firestore change: %s document", change.Kind)
 				if change.Kind == firestore.DocumentAdded {
 					message, err := r.documentToMessage(change.Doc)
 					if err != nil {
-						log.Printf("Error parsing document: %v", err)
+						log.Printf("❌ Error parsing document: %v", err)
 						continue
 					}
+					log.Printf("✅ Sending message to channel: %s", message.Content)
 					messageChan <- message
 				}
 			}
@@ -104,7 +110,6 @@ func (r *MessageRepositoryImpl) StreamByRoomID(ctx context.Context, roomID strin
 
 	return messageChan, nil
 }
-
 func (r *MessageRepositoryImpl) documentToMessage(doc *firestore.DocumentSnapshot) (*entities.Message, error) {
 	var data map[string]interface{}
 	if err := doc.DataTo(&data); err != nil {

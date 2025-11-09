@@ -7,13 +7,14 @@ export function useChat() {
   const roomId = ref('general');
   const status = ref('Ready to connect');
   const isLoading = ref(false);
-  const isAuthenticated = ref(false); 
+  const isAuthenticated = ref(false);
   const currentUser = ref({});
   const authError = ref('');
   const userMap = ref(new Map());
   const isConnected = ref(false);
 
   let messageStream = null;
+  let pollingInterval = null;
 
   const canSendMessage = computed(() => (
     isAuthenticated.value &&
@@ -29,18 +30,18 @@ export function useChat() {
   const ensureMessageUsernames = (messageArray) => {
     return messageArray.map(message => {
       if (message.username) return message;
-      
+
       const storedUsername = userMap.value.get(message.userId);
       if (storedUsername) {
         return { ...message, username: storedUsername };
       }
-      
+
       if (message.userId === currentUser.value?.userId) {
-        const username = currentUser.value?.username ;
+        const username = currentUser.value?.username;
         userMap.value.set(message.userId, username);
         return { ...message, username };
       }
-      
+
       const fallbackUsername = `User_${message.username}`;
       userMap.value.set(message.userId, fallbackUsername);
       return { ...message, username: fallbackUsername };
@@ -63,11 +64,11 @@ export function useChat() {
   const handleAuthResult = (result, successMessage) => {
     if (result.success) {
       isAuthenticated.value = true;
-      currentUser.value = { 
+      currentUser.value = {
         username: result.username,
-        userId: result.userId 
+        userId: result.userId
       };
-      
+
       updateUserMap(result.userId, result.username);
       status.value = successMessage;
       authError.value = '';
@@ -86,6 +87,31 @@ export function useChat() {
     throw error;
   };
 
+  const startPolling = () => {
+    stopPolling();
+    console.log('🔄 STARTING POLLING - will check for new messages every 2 seconds');
+
+    const pollImmediately = async () => {
+      try {
+        console.log('📡 POLLING: Checking for new messages...');
+        await loadMessageHistory();
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    };
+
+    pollImmediately();
+
+    pollingInterval = setInterval(pollImmediately, 2000);
+  };
+  const stopPolling = () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+      console.log('🛑 Polling stopped');
+    }
+  };
+
   const connectToRoom = async () => {
     if (isConnected.value) {
       console.log('Already connected to room');
@@ -94,16 +120,21 @@ export function useChat() {
 
     try {
       setLoadingState(true, 'Connecting to room...');
-      
+
       await loadMessageHistory();
-      
-      await startMessageStream();
-      
+
+      console.log('🔄 FORCING POLLING MODE (streaming is broken)');
+      startPolling();
       isConnected.value = true;
-      status.value = `Connected to room: ${roomId.value}`;
+      status.value = `Connected to room: ${roomId.value} (Polling - 2s intervals)`;
+
+      console.log('✅ Now using polling - messages should appear automatically every 2 seconds');
+
     } catch (error) {
-      handleApiError(error, 'connect to room');
-      throw error;
+      console.error('Connection error:', error);
+      startPolling();
+      isConnected.value = true;
+      status.value = `Connected to room: ${roomId.value} (Polling fallback)`;
     } finally {
       setLoadingState(false);
     }
@@ -111,6 +142,7 @@ export function useChat() {
 
   const disconnectFromRoom = () => {
     stopMessageStream();
+    stopPolling();
     isConnected.value = false;
     clearMessages();
     status.value = `Disconnected from room: ${roomId.value}`;
@@ -159,7 +191,7 @@ export function useChat() {
   const logout = () => {
     localStorage.removeItem('chat_token');
     localStorage.removeItem('chat_user');
-    
+
     isAuthenticated.value = false;
     currentUser.value = {};
     authError.value = '';
@@ -172,7 +204,7 @@ export function useChat() {
     try {
       const token = localStorage.getItem('chat_token');
       const userStr = localStorage.getItem('chat_user');
-      
+
       if (token && userStr) {
         const user = JSON.parse(userStr);
         const result = await chatService.validateToken(token);
@@ -200,28 +232,27 @@ export function useChat() {
 
     try {
       setLoadingState(true, 'Sending message...');
-      
+
       const userId = currentUser.value?.userId || '';
       if (!userId) {
         throw new Error('User ID not available');
       }
       const username = currentUser.value?.username || '';
 
-
       const response = await chatService.sendMessage(userId, username, messageContent, roomId.value);
 
       const newMessage = {
         messageId: response.messageId,
         userId: response.userId,
-        username: 'user_'+response.username,
+        username: 'user_' + response.username,
         content: response.content,
         timestamp: response.timestamp,
         roomId: response.roomId
       };
-      
+
       updateUserMap(response.userId, newMessage.username);
       messages.value.push(newMessage);
-      
+
       status.value = 'Message sent successfully';
       return response;
     } catch (error) {
@@ -234,51 +265,68 @@ export function useChat() {
   const loadMessageHistory = async () => {
     try {
       console.log('📚 Loading message history for room:', roomId.value);
-      
+
       const historyMessages = await chatService.getMessageHistory(roomId.value);
+      console.log('📊 Raw history messages:', historyMessages);
+
       const messagesWithUsernames = ensureMessageUsernames(historyMessages);
-      
-      messages.value = messagesWithUsernames.reverse();
-      console.log(`✅ Loaded ${historyMessages.length} messages`);
-      
+      const reversedMessages = messagesWithUsernames.reverse();
+
+      console.log(`🔄 Updating UI: ${reversedMessages.length} messages (was ${messages.value.length})`);
+
+      messages.value.length = 0;
+      messages.value.push(...reversedMessages);
+
+      console.log('✅ Messages array after update:', messages.value.map(m => ({
+        id: m.messageId,
+        content: m.content,
+        user: m.username
+      })));
+
       return historyMessages;
     } catch (error) {
       console.error('❌ Failed to load history:', error);
       throw error;
     }
   };
+
   const startMessageStream = () => {
     try {
       stopMessageStream();
 
       messageStream = chatService.streamMessages(roomId.value, {
         onMessage: (message) => {
+          console.log('💬 useChat: New real-time message received:', message);
+
           const messageWithUsername = ensureMessageUsernames([message])[0];
-          
+
           const isDuplicate = messages.value.some(
             msg => msg.messageId === messageWithUsername.messageId
           );
 
           if (!isDuplicate) {
+            console.log('✅ useChat: Adding new message to UI');
             messages.value.push(messageWithUsername);
           }
         },
         onError: (error) => {
-          status.value = `Stream error: ${error.message}`;
-          console.error('Stream error:', error);
-          isConnected.value = false;
+          console.error('❌ useChat: Stream error:', error);
+          startPolling();
+          status.value = `Connected to room: ${roomId.value} (Polling fallback)`;
         },
         onEnd: () => {
-          status.value = 'Stream ended';
+          console.log('🔚 useChat: Stream ended');
           messageStream = null;
-          isConnected.value = false;
+          startPolling();
+          status.value = `Connected to room: ${roomId.value} (Polling)`;
         }
       });
 
-      console.log('🔛 Message stream started');
-      return messageStream;
+      console.log('🔛 Message stream started successfully');
+      return true;
     } catch (error) {
-      handleApiError(error, 'start stream');
+      console.error('❌ useChat: Error starting stream:', error);
+      return false;
     }
   };
 
@@ -309,22 +357,22 @@ export function useChat() {
     currentUser,
     authError,
     isConnected,
-    
+
     register,
     login,
     logout,
-    checkAuthentication, 
-    
+    checkAuthentication,
+
     sendMessage,
     loadMessageHistory,
     startMessageStream,
     stopMessageStream,
     clearMessages,
-    
+
     connectToRoom,
     disconnectFromRoom,
     toggleRoomConnection,
-    
+
     canSendMessage,
     connectionParamsValid
   };
