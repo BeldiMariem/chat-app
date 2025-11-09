@@ -107,25 +107,33 @@ func (h *ChatHandler) StreamMessages(req *pb.StreamRequest, stream pb.ChatServic
 	if token := req.GetToken(); token != "" {
 		_, err := h.authUseCase.ValidateToken(ctx, token)
 		if err != nil {
+			log.Printf("❌ Stream auth failed: %v", err)
 			return err
 		}
 	}
 
-	log.Printf("Starting message stream for room: %s", roomID)
+	log.Printf("🎯 Starting message stream for room: %s", roomID)
 
 	messageChan, err := h.messageUseCase.StreamMessages(ctx, roomID)
 	if err != nil {
+		log.Printf("❌ Stream error: %v", err)
 		return err
 	}
+
+	log.Printf("✅ Stream connected, waiting for messages...")
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("🔚 Stream context done: %v", ctx.Err())
 			return ctx.Err()
 		case message, ok := <-messageChan:
 			if !ok {
+				log.Printf("🔚 Message channel closed")
 				return nil
 			}
+
+			log.Printf("📨 Stream received message: %s", message.Content)
 
 			username := "user_" + message.Username
 			if user, err := h.authUseCase.ValidateToken(ctx, req.GetToken()); err == nil {
@@ -141,12 +149,14 @@ func (h *ChatHandler) StreamMessages(req *pb.StreamRequest, stream pb.ChatServic
 				Timestamp: message.Timestamp.Format(time.RFC3339),
 			}
 
-			log.Printf("Sending message to stream: %s", resp.GetContent())
+			log.Printf("🚀 Sending message to client: %s", resp.GetContent())
 
 			if err := stream.Send(resp); err != nil {
-				log.Printf("Stream send error: %v", err)
+				log.Printf("❌ Stream send error: %v", err)
 				return err
 			}
+
+			log.Printf("✅ Message sent to client successfully")
 		}
 	}
 }

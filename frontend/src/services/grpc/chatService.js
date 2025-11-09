@@ -8,6 +8,22 @@ export class ChatService {
         this._isAuthenticated = false;
     }
 
+    async testProxyConnection() {
+        try {
+            console.log('🧪 Testing proxy connection...');
+            const response = await fetch('http://localhost:8081');
+            console.log('Proxy response:', response.status, response.statusText);
+
+            const testRequest = createStreamRequest('general', '');
+            console.log('Test request created');
+
+            return true;
+        } catch (error) {
+            console.error('❌ Proxy connection test failed:', error);
+            return false;
+        }
+    }
+
     get isAuthenticated() {
         return this._isAuthenticated;
     }
@@ -34,9 +50,6 @@ export class ChatService {
         return this.token;
     }
 
-    isAuthenticated() {
-        return this.isAuthenticated;
-    }
 
     loadAuthFromStorage() {
         const token = localStorage.getItem('chat_token');
@@ -230,49 +243,111 @@ export class ChatService {
             });
         });
     }
+    async testStreamConnection() {
+        console.log('🧪 Testing stream connection...');
 
+        return new Promise((resolve) => {
+            const request = createStreamRequest('general', this.token);
+
+            const stream = this.client.streamMessages(request, {});
+
+            stream.on('data', (response) => {
+                console.log('✅ STREAM WORKING! Received data:', response);
+                stream.cancel();
+                resolve(true);
+            });
+
+            stream.on('error', (error) => {
+                console.error('❌ Stream test error:', error);
+                resolve(false);
+            });
+
+            setTimeout(() => {
+                console.log('⏰ Stream test timeout - no data received');
+                stream.cancel();
+                resolve(false);
+            }, 10000);
+        });
+    }
     streamMessages(roomId, callbacks) {
-        const request = createStreamRequest(roomId);
+        try {
+            console.log('🔍 Starting message stream for room:', roomId);
+            console.log('🔑 Auth status:', this._isAuthenticated); 
+            console.log('🔑 Token:', this.token);
 
-        const stream = this.client.streamMessages(request, {});
+            const request = createStreamRequest(roomId, this.token);
+            console.log('📦 Stream request created');
 
-        stream.on('data', (response) => {
-            let messageData;
+            console.log('🚀 Calling gRPC stream method...');
+            const stream = this.client.streamMessages(request, {});
 
-            if (response instanceof Uint8Array) {
-                messageData = this.parseMessageResponse(response);
-            } else if (response.getUserId) {
-                messageData = {
-                    messageId: response.getMessageId(),
-                    userId: response.getUserId(),
-                    username: response.getUsername(),
-                    content: response.getContent(),
-                    timestamp: response.getTimestamp(),
-                    roomId: response.getRoomId()
-                };
-            }
+            stream.on('data', (response) => {
+                console.log('📨 Stream data received:', response);
+                console.log('🔧 Response type:', typeof response);
+                console.log('🔧 Is Uint8Array?:', response instanceof Uint8Array);
 
-            if (messageData && messageData.userId && messageData.content) {
-                callbacks.onMessage?.(messageData);
-            }
-        });
+                let messageData;
 
-        stream.on('error', (error) => {
+                if (response instanceof Uint8Array) {
+                    console.log('🔧 Parsing Uint8Array response');
+                    messageData = this.parseMessageResponse(response);
+                    console.log('🔧 Parsed result:', messageData);
+                } else {
+                    console.log('🔧 Using object response');
+                    messageData = {
+                        messageId: response.getMessageId(),
+                        userId: response.getUserId(),
+                        username: response.getUsername(),
+                        content: response.getContent(),
+                        timestamp: response.getTimestamp(),
+                        roomId: response.getRoomId()
+                    };
+                    console.log('🔧 Object result:', messageData);
+                }
+
+                console.log('💬 Final message data:', messageData);
+
+                if (messageData && messageData.userId && messageData.content) {
+                    console.log('✅ Calling onMessage callback');
+                    callbacks.onMessage?.(messageData);
+                } else {
+                    console.warn('⚠️ Invalid message data, not calling callback');
+                }
+            });
+
+            stream.on('error', (error) => {
+                console.error('❌ Stream error:', {
+                    code: error.code,
+                    message: error.message,
+                    metadata: error.metadata
+                });
+                callbacks.onError?.(error);
+            });
+
+            stream.on('end', () => {
+                console.log('🔚 Stream ended normally');
+                callbacks.onEnd?.();
+            });
+
+            stream.on('status', (status) => {
+                console.log('📊 Stream status:', status);
+                callbacks.onStatus?.(status);
+            });
+
+            console.log('✅ Stream created successfully');
+            return {
+                cancel: () => {
+                    console.log('🛑 Cancelling stream');
+                    stream.cancel();
+                },
+                getStatus: () => stream.getStatus()
+            };
+
+        } catch (error) {
+            console.error('❌ Error creating stream:', error);
             callbacks.onError?.(error);
-        });
-
-        stream.on('end', () => {
-            callbacks.onEnd?.();
-        });
-
-        stream.on('status', (status) => {
-            callbacks.onStatus?.(status);
-        });
-
-        return {
-            cancel: () => stream.cancel(),
-            getStatus: () => stream.getStatus()
-        };
+            return null;
+        }
     }
 
     parseAuthResponse(bytes) {
@@ -394,62 +469,62 @@ export class ChatService {
     }
 
     parseMessageResponse(bytes) {
-    try {
-        const decoder = new TextDecoder();
-        let offset = 0;
-        const result = {};
+        try {
+            const decoder = new TextDecoder();
+            let offset = 0;
+            const result = {};
 
-        while (offset < bytes.length) {
-            const tagResult = this.readVarint(bytes, offset);
-            if (!tagResult) break;
+            while (offset < bytes.length) {
+                const tagResult = this.readVarint(bytes, offset);
+                if (!tagResult) break;
 
-            const { value: tag, newOffset: tagEnd } = tagResult;
-            const fieldNumber = tag >> 3;
-            const wireType = tag & 0x07;
-            offset = tagEnd;
+                const { value: tag, newOffset: tagEnd } = tagResult;
+                const fieldNumber = tag >> 3;
+                const wireType = tag & 0x07;
+                offset = tagEnd;
 
-            if (wireType === 2) {
-                const lengthResult = this.readVarint(bytes, offset);
-                if (!lengthResult) break;
+                if (wireType === 2) {
+                    const lengthResult = this.readVarint(bytes, offset);
+                    if (!lengthResult) break;
 
-                const { value: length, newOffset: lengthEnd } = lengthResult;
-                offset = lengthEnd;
+                    const { value: length, newOffset: lengthEnd } = lengthResult;
+                    offset = lengthEnd;
 
-                if (offset + length > bytes.length) break;
+                    if (offset + length > bytes.length) break;
 
-                const stringBytes = bytes.slice(offset, offset + length);
-                const stringValue = decoder.decode(stringBytes);
-                offset += length;
+                    const stringBytes = bytes.slice(offset, offset + length);
+                    const stringValue = decoder.decode(stringBytes);
+                    offset += length;
 
-                const fieldMap = {
-                    1: 'messageId',
-                    2: 'userId',
-                    3: 'content',    
-                    4: 'timestamp',  
-                    5: 'roomId',     
-                    6: 'username'    
-                };
+                    const fieldMap = {
+                        1: 'messageId',
+                        2: 'userId',
+                        3: 'content',
+                        4: 'timestamp',
+                        5: 'roomId',
+                        6: 'username'
+                    };
 
-                const fieldName = fieldMap[fieldNumber];
-                if (fieldName) {
-                    result[fieldName] = stringValue;
+                    const fieldName = fieldMap[fieldNumber];
+                    if (fieldName) {
+                        result[fieldName] = stringValue;
+                    }
+                } else if (wireType === 0) {
+                    const varintResult = this.readVarint(bytes, offset);
+                    if (!varintResult) break;
+                    offset = varintResult.newOffset;
+                } else {
+                    break;
                 }
-            } else if (wireType === 0) {
-                const varintResult = this.readVarint(bytes, offset);
-                if (!varintResult) break;
-                offset = varintResult.newOffset;
-            } else {
-                break;
             }
+
+            return result;
+
+        } catch (error) {
+            console.error('❌ Error parsing MessageResponse:', error);
+            return null;
         }
-
-        return result;
-
-    } catch (error) {
-        console.error('❌ Error parsing MessageResponse:', error);
-        return null;
     }
-}
 
     parseHistoryResponse(bytes) {
         try {
@@ -530,3 +605,7 @@ export class ChatService {
 export const chatService = new ChatService();
 
 chatService.loadAuthFromStorage();
+if (typeof window !== 'undefined') {
+    window.debugChatService = chatService;
+    console.log('🔧 chatService exported globally as window.debugChatService');
+}

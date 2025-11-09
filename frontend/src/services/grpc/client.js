@@ -30,7 +30,7 @@ try {
       if (this.userId) parts.push(createProtobufField(1, 2, this.userId));
       if (this.username) parts.push(createProtobufField(2, 2, this.username));
       if (this.content) parts.push(createProtobufField(3, 2, this.content));
-      if (this.roomId) parts.push(createProtobufField(4, 2, this.roomId)); 
+      if (this.roomId) parts.push(createProtobufField(4, 2, this.roomId));
       return concatenateArrays(parts);
     }
   };
@@ -38,14 +38,17 @@ try {
   StreamRequest = class {
     constructor() {
       this.roomId = '';
+      this.token = '';
     }
     setRoomId(val) { this.roomId = val; }
+    setToken(val) { this.token = val; }
     serializeBinary() {
       return this.serializeToBinary();
     }
     serializeToBinary() {
       const parts = [];
       if (this.roomId) parts.push(createProtobufField(1, 2, this.roomId));
+      if (this.token) parts.push(createProtobufField(2, 2, this.token));
       return concatenateArrays(parts);
     }
   };
@@ -105,7 +108,7 @@ try {
   };
 }
 
-export const client = new ChatServiceClient('http://localhost:8081', null, null);
+export const client = new ChatServiceClient('http://localhost:8081');
 
 export class GrpcClient {
   constructor() {
@@ -142,9 +145,12 @@ export function createMessageRequest(userId, username, content, roomId) {
   return request;
 }
 
-export function createStreamRequest(roomId) {
+export function createStreamRequest(roomId, token = '') {
   const request = new StreamRequest();
   request.setRoomId(roomId || 'general');
+  if (token) {
+    request.setToken(token);
+  }
   return request;
 }
 
