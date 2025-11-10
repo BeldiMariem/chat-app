@@ -209,17 +209,17 @@ export function useChat() {
 
       if (streamStarted) {
         isConnected.value = true;
-        status.value = `Connected to room: ${roomId.value} (Real-time)`;
+        status.value = `Connected to room: ${roomId.value} `;
       } else {
         startPolling();
         isConnected.value = true;
-        status.value = `Connected to room: ${roomId.value} (10s updates)`;
+        status.value = `Connected to room: ${roomId.value} `;
       }
 
     } catch (error) {
       startPolling();
       isConnected.value = true;
-      status.value = `Connected to room: ${roomId.value} (10s updates)`;
+      status.value = `Connected to room: ${roomId.value} `;
     } finally {
       setLoadingState(false);
     }
