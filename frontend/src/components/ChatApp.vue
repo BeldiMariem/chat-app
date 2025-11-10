@@ -62,17 +62,13 @@
                     <div class="user-welcome">
                         Welcome, <strong>{{ username }}</strong>!
                         <button @click="handleLogout" class="logout-btn">Logout</button>
-
                     </div>
-
                     <div class="room-selection">
                         <input v-model="roomId" placeholder="Room ID" class="room-input" :disabled="isConnected" />
                         <button @click="toggleConnection" class="connect-btn" :disabled="!roomId.trim()">
                             {{ isConnected ? 'Disconnect' : 'Connect' }}
                         </button>
-                        <button @click="loadMessageHistory" class="history-btn" :disabled="!isConnected">
-                            📚 Load History
-                        </button>
+
                     </div>
                 </div>
 
@@ -80,21 +76,48 @@
                     {{ status }}
                 </div>
 
-                <MessageList :messages="messages" :current-user-id="currentUserId" :is-connected="isConnected" />
+                <MessageList :messages="messages" :currentUserId="currentUser.userId" :isConnected="isConnected"
+                    :hasMoreMessages="hasMoreMessages" :isLoadingMore="isLoadingMore" :currentPage="currentPage"
+                    :loadMoreMessages="loadMoreMessages" />
 
-                <MessageInput :is-connected="isConnected" :is-loading="isLoading" @send-message="handleSendMessage" />
+                <MessageInput :is-connected="isConnected" :is-loading="isLoading"
+                    @send-message="handleSendMessage" />
             </div>
         </main>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useChat } from '../composables/useChat.js';
 
 import ConnectionStatus from './ConnectionStatus.vue';
 import MessageList from './MessageList.vue';
 import MessageInput from './MessageInput.vue';
+
+const {
+    messages,
+    roomId,
+    status,
+    isLoading,
+    isAuthenticated,
+    currentUser,
+    authError,
+    isConnected,
+
+    loadMoreMessages,
+    hasMoreMessages,
+    isLoadingMore,
+    currentPage,
+
+    register,
+    login,
+    logout,
+    checkAuthentication,
+
+    sendMessage,
+    toggleRoomConnection
+} = useChat();
 
 const authMode = ref('login');
 const loginUsername = ref('');
@@ -102,28 +125,9 @@ const loginPassword = ref('');
 const registerUsername = ref('');
 const registerPassword = ref('');
 const registerConfirmPassword = ref('');
-const isCheckingAuth = ref(true); 
-
-const {
-  messages,
-  roomId,
-  status,
-  isLoading,
-  isAuthenticated,
-  currentUser,
-  authError,
-  isConnected,
-  register,
-  login,
-  logout,
-  checkAuthentication, 
-  sendMessage,
-  loadMessageHistory,
-  toggleRoomConnection
-} = useChat();
+const isCheckingAuth = ref(true);
 
 const username = computed(() => currentUser.value?.username || 'User');
-const currentUserId = computed(() => currentUser.value?.userId || '');
 
 const canLogin = computed(() => {
     return loginUsername.value.trim() && loginPassword.value.trim();
@@ -142,6 +146,7 @@ const statusClass = computed(() => ({
     'status-info': !authError.value,
     'status-error': !!authError.value
 }));
+
 
 const handleLogin = async () => {
     try {
@@ -179,25 +184,35 @@ const handleSendMessage = async (messageContent) => {
 };
 
 const toggleConnection = async () => {
-  try {
-    await toggleRoomConnection();
-  } catch (error) {
-    console.error('Connection toggle error:', error);
-  }
+    try {
+        await toggleRoomConnection();
+    } catch (error) {
+        console.error('Connection toggle error:', error);
+    }
+};
+
+const fixUndefinedValues = () => {
+    if (hasMoreMessages.value === undefined) {
+        hasMoreMessages.value = true;
+    }
+    if (currentPage.value === undefined) {
+        currentPage.value = 1;
+    }
 };
 
 onMounted(async () => {
-  try {
-    const isAuthValid = await checkAuthentication();
-    isCheckingAuth.value = false;
-    
-    if (isAuthValid && roomId.value.trim()) {
-      await toggleRoomConnection();
+    try {
+        const isAuthValid = await checkAuthentication();
+        isCheckingAuth.value = false;
+
+        if (isAuthValid && roomId.value.trim()) {
+            await toggleRoomConnection();
+        }
+        setTimeout(fixUndefinedValues, 100);
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        isCheckingAuth.value = false;
     }
-  } catch (error) {
-    console.error('Auth check failed:', error);
-    isCheckingAuth.value = false;
-  }
 });
 
 onUnmounted(() => {

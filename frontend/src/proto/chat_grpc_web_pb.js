@@ -14,8 +14,6 @@ export class ChatServiceClient {
       callback = arguments[1];
       metadata = {};
     }
-
-    console.log('👤 Registering user...');
     
     return this.client_.rpcCall(
       `${this.hostname_}/chat.ChatService/Register`,
@@ -30,10 +28,7 @@ export class ChatServiceClient {
     if (arguments.length === 2) {
       callback = arguments[1];
       metadata = {};
-    }
-
-    console.log('🔐 Logging in user...');
-    
+    }    
     return this.client_.rpcCall(
       `${this.hostname_}/chat.ChatService/Login`,
       request,
@@ -49,8 +44,6 @@ export class ChatServiceClient {
       metadata = {};
     }
 
-    console.log('🔍 Validating token...');
-    
     return this.client_.rpcCall(
       `${this.hostname_}/chat.ChatService/ValidateToken`,
       request,
@@ -65,8 +58,6 @@ export class ChatServiceClient {
       callback = arguments[1];
       metadata = {};
     }
-
-    console.log('📤 Sending message to backend...');
     
     return this.client_.rpcCall(
       `${this.hostname_}/chat.ChatService/SendMessage`,
@@ -77,9 +68,7 @@ export class ChatServiceClient {
     );
   }
 
-  streamMessages(request, metadata) {
-    console.log('📡 Starting real-time message stream...');
-    
+  streamMessages(request, metadata) {    
     return this.client_.serverStreaming(
       `${this.hostname_}/chat.ChatService/StreamMessages`,
       request,
@@ -92,10 +81,7 @@ export class ChatServiceClient {
     if (arguments.length === 2) {
       callback = arguments[1];
       metadata = {};
-    }
-
-    console.log('📚 Getting message history...');
-    
+    }    
     return this.client_.rpcCall(
       `${this.hostname_}/chat.ChatService/GetMessageHistory`,
       request,
@@ -230,17 +216,13 @@ const methodDescriptor_ChatService_SendMessage = new grpcWeb.MethodDescriptor(
   Object,
   Object,
   function(request) {
-    console.log('🔧 Serializing SendMessage request:', request);
     if (typeof request.serializeBinary === 'function') {
       const result = request.serializeBinary();
-      console.log('🔧 Serialized bytes length:', result.length);
       return result;
     }
-    console.warn('⚠️ Request does not have serializeBinary method');
     return new Uint8Array();
   },
   function(responseBytes) {
-    console.log('🔧 Deserializing SendMessage response, bytes length:', responseBytes.length);
     return responseBytes;
   }
 );

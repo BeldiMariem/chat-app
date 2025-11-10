@@ -13,9 +13,23 @@ export function useChat() {
   const userMap = ref(new Map());
   const isConnected = ref(false);
 
+  const paginationLimit = ref(5);
+  const currentPage = ref(1);
+  const hasMoreMessages = ref(false);
+  const isLoadingMore = ref(false);
+  const allMessagesLoaded = ref([]);
+
   let messageStream = null;
   let pollingInterval = null;
+  const pendingMessageConfirmations = ref(new Set());
+  const confirmedMessageIds = ref(new Set());
 
+  const isSendingMessage = computed(() => {
+    return isLoading.value || pendingMessageConfirmations.value.size > 0;
+  });
+  const isWaitingForMessageConfirmation = computed(() => {
+    return pendingMessageConfirmations.value.size > 0;
+  });
   const canSendMessage = computed(() => (
     isAuthenticated.value &&
     roomId.value.trim() &&
@@ -26,6 +40,12 @@ export function useChat() {
   const connectionParamsValid = computed(() => (
     isAuthenticated.value && roomId.value.trim()
   ));
+
+  const displayedMessages = computed(() => {
+    const totalMessages = allMessagesLoaded.value.length;
+    const startIndex = Math.max(0, totalMessages - (currentPage.value * paginationLimit.value));
+    return allMessagesLoaded.value.slice(startIndex);
+  });
 
   const ensureMessageUsernames = (messageArray) => {
     return messageArray.map(message => {
@@ -83,58 +103,123 @@ export function useChat() {
   const handleApiError = (error, operation) => {
     const errorMessage = `Failed to ${operation}: ${error.message}`;
     status.value = errorMessage;
-    console.error(`${operation} error:`, error);
     throw error;
   };
 
+  const loadMoreMessages = async () => {
+    if (isLoadingMore.value || !hasMoreMessages.value) return;
+
+    try {
+      isLoadingMore.value = true;
+      currentPage.value++;
+
+      const totalMessages = allMessagesLoaded.value.length;
+      const currentlyShowing = currentPage.value * paginationLimit.value;
+      hasMoreMessages.value = totalMessages > currentlyShowing;
+
+    } catch (error) {
+      currentPage.value--;
+    } finally {
+      isLoadingMore.value = false;
+    }
+  };
+
+  const loadMessageHistory = async () => {
+    try {
+      const historyMessages = await chatService.getMessageHistory(roomId.value, 1000);
+      const messagesWithUsernames = ensureMessageUsernames(historyMessages);
+
+      allMessagesLoaded.value = messagesWithUsernames.reverse();
+
+      currentPage.value = 1;
+      const totalMessages = allMessagesLoaded.value.length;
+      hasMoreMessages.value = totalMessages > paginationLimit.value;
+
+      return historyMessages;
+    } catch (error) {
+      throw error;
+    }
+  };
   const startPolling = () => {
     stopPolling();
-    console.log('🔄 STARTING POLLING - will check for new messages every 2 seconds');
+
+    let errorCount = 0;
+    const baseDelay = 10000;
+    const maxDelay = 30000;
 
     const pollImmediately = async () => {
       try {
-        console.log('📡 POLLING: Checking for new messages...');
-        await loadMessageHistory();
+
+        const historyMessages = await chatService.getMessageHistory(roomId.value, 50);
+        const messagesWithUsernames = ensureMessageUsernames(historyMessages);
+
+        const newMessages = messagesWithUsernames.reverse();
+
+        let hasNewConfirmations = false;
+        newMessages.forEach(message => {
+          if (pendingMessageConfirmations.value.has(message.messageId) &&
+            !confirmedMessageIds.value.has(message.messageId)) {
+            confirmedMessageIds.value.add(message.messageId);
+            pendingMessageConfirmations.value.delete(message.messageId);
+            hasNewConfirmations = true;
+          }
+        });
+
+        const currentMessageIds = allMessagesLoaded.value.map(m => m.messageId).join(',');
+        const newMessageIds = newMessages.map(m => m.messageId).join(',');
+
+        if (currentMessageIds !== newMessageIds) {
+          allMessagesLoaded.value = newMessages;
+
+          const totalMessages = allMessagesLoaded.value.length;
+          hasMoreMessages.value = totalMessages > (currentPage.value * paginationLimit.value);
+
+        }
+
+        if (hasNewConfirmations && pendingMessageConfirmations.value.size === 0) {
+          setLoadingState(false);
+          status.value = 'Message delivered!';
+        }
+
       } catch (error) {
         console.error('Polling error:', error);
       }
     };
 
     pollImmediately();
-
-    pollingInterval = setInterval(pollImmediately, 2000);
+    pollingInterval = setInterval(pollImmediately, baseDelay);
   };
   const stopPolling = () => {
     if (pollingInterval) {
       clearInterval(pollingInterval);
       pollingInterval = null;
-      console.log('🛑 Polling stopped');
     }
   };
 
   const connectToRoom = async () => {
     if (isConnected.value) {
-      console.log('Already connected to room');
       return;
     }
 
     try {
       setLoadingState(true, 'Connecting to room...');
-
       await loadMessageHistory();
 
-      console.log('🔄 FORCING POLLING MODE (streaming is broken)');
-      startPolling();
-      isConnected.value = true;
-      status.value = `Connected to room: ${roomId.value} (Polling - 2s intervals)`;
+      const streamStarted = startMessageStream();
 
-      console.log('✅ Now using polling - messages should appear automatically every 2 seconds');
+      if (streamStarted) {
+        isConnected.value = true;
+        status.value = `Connected to room: ${roomId.value} (Real-time)`;
+      } else {
+        startPolling();
+        isConnected.value = true;
+        status.value = `Connected to room: ${roomId.value} (10s updates)`;
+      }
 
     } catch (error) {
-      console.error('Connection error:', error);
       startPolling();
       isConnected.value = true;
-      status.value = `Connected to room: ${roomId.value} (Polling fallback)`;
+      status.value = `Connected to room: ${roomId.value} (10s updates)`;
     } finally {
       setLoadingState(false);
     }
@@ -200,6 +285,24 @@ export function useChat() {
     status.value = 'Logged out';
   };
 
+  const manualRefresh = async () => {
+    try {
+      setLoadingState(true, 'Refreshing messages...');
+      const historyMessages = await chatService.getMessageHistory(roomId.value, 50);
+      const messagesWithUsernames = ensureMessageUsernames(historyMessages);
+
+      allMessagesLoaded.value = messagesWithUsernames.reverse();
+
+      const totalMessages = allMessagesLoaded.value.length;
+      hasMoreMessages.value = totalMessages > (currentPage.value * paginationLimit.value);
+
+      status.value = 'Messages refreshed';
+    } catch (error) {
+      status.value = 'Failed to refresh messages';
+    } finally {
+      setLoadingState(false);
+    }
+  };
   const checkAuthentication = async () => {
     try {
       const token = localStorage.getItem('chat_token');
@@ -217,7 +320,6 @@ export function useChat() {
       }
       return false;
     } catch (error) {
-      console.error('Auth check failed:', error);
       localStorage.removeItem('chat_token');
       localStorage.removeItem('chat_user');
       return false;
@@ -225,8 +327,7 @@ export function useChat() {
   };
 
   const sendMessage = async (messageContent) => {
-    if (!canSendMessage.value) {
-      console.log('❌ Cannot send message - validation failed');
+    if (!canSendMessage.value || !messageContent.trim()) {
       return;
     }
 
@@ -234,59 +335,26 @@ export function useChat() {
       setLoadingState(true, 'Sending message...');
 
       const userId = currentUser.value?.userId || '';
-      if (!userId) {
-        throw new Error('User ID not available');
-      }
       const username = currentUser.value?.username || '';
 
       const response = await chatService.sendMessage(userId, username, messageContent, roomId.value);
 
-      const newMessage = {
-        messageId: response.messageId,
-        userId: response.userId,
-        username: 'user_' + response.username,
-        content: response.content,
-        timestamp: response.timestamp,
-        roomId: response.roomId
-      };
+      pendingMessageConfirmations.value.add(response.messageId);
 
-      updateUserMap(response.userId, newMessage.username);
-      messages.value.push(newMessage);
+      updateUserMap(response.userId, 'user_' + response.username);
 
-      status.value = 'Message sent successfully';
+      status.value = '✅ Message sent! Waiting for it to appear...';
+
+      setTimeout(() => {
+        pendingMessageConfirmations.value.delete(response.messageId);
+      }, 2000);
+
       return response;
+
     } catch (error) {
       handleApiError(error, 'send message');
     } finally {
       setLoadingState(false);
-    }
-  };
-
-  const loadMessageHistory = async () => {
-    try {
-      console.log('📚 Loading message history for room:', roomId.value);
-
-      const historyMessages = await chatService.getMessageHistory(roomId.value);
-      console.log('📊 Raw history messages:', historyMessages);
-
-      const messagesWithUsernames = ensureMessageUsernames(historyMessages);
-      const reversedMessages = messagesWithUsernames.reverse();
-
-      console.log(`🔄 Updating UI: ${reversedMessages.length} messages (was ${messages.value.length})`);
-
-      messages.value.length = 0;
-      messages.value.push(...reversedMessages);
-
-      console.log('✅ Messages array after update:', messages.value.map(m => ({
-        id: m.messageId,
-        content: m.content,
-        user: m.username
-      })));
-
-      return historyMessages;
-    } catch (error) {
-      console.error('❌ Failed to load history:', error);
-      throw error;
     }
   };
 
@@ -296,36 +364,30 @@ export function useChat() {
 
       messageStream = chatService.streamMessages(roomId.value, {
         onMessage: (message) => {
-          console.log('💬 useChat: New real-time message received:', message);
-
           const messageWithUsername = ensureMessageUsernames([message])[0];
 
-          const isDuplicate = messages.value.some(
+          const isDuplicate = allMessagesLoaded.value.some(
             msg => msg.messageId === messageWithUsername.messageId
           );
 
           if (!isDuplicate) {
-            console.log('✅ useChat: Adding new message to UI');
-            messages.value.push(messageWithUsername);
+            allMessagesLoaded.value.push(messageWithUsername);
+
+            const totalMessages = allMessagesLoaded.value.length;
+            hasMoreMessages.value = totalMessages > (currentPage.value * paginationLimit.value);
           }
         },
         onError: (error) => {
-          console.error('❌ useChat: Stream error:', error);
           startPolling();
-          status.value = `Connected to room: ${roomId.value} (Polling fallback)`;
         },
         onEnd: () => {
-          console.log('🔚 useChat: Stream ended');
-          messageStream = null;
           startPolling();
-          status.value = `Connected to room: ${roomId.value} (Polling)`;
         }
       });
 
-      console.log('🔛 Message stream started successfully');
       return true;
     } catch (error) {
-      console.error('❌ useChat: Error starting stream:', error);
+      startPolling();
       return false;
     }
   };
@@ -334,13 +396,14 @@ export function useChat() {
     if (messageStream) {
       messageStream.cancel();
       messageStream = null;
-      console.log('🔚 Message stream stopped');
     }
   };
 
   const clearMessages = () => {
     messages.value = [];
-    console.log('🗑️ Messages cleared');
+    allMessagesLoaded.value = [];
+    currentPage.value = 1;
+    hasMoreMessages.value = false;
   };
 
   onUnmounted(() => {
@@ -348,7 +411,7 @@ export function useChat() {
   });
 
   return {
-    messages,
+    messages: displayedMessages,
     currentMessage,
     roomId,
     status,
@@ -357,7 +420,15 @@ export function useChat() {
     currentUser,
     authError,
     isConnected,
+    isSendingMessage,
 
+    loadMoreMessages,
+    hasMoreMessages,
+    isLoadingMore,
+    currentPage,
+
+    allMessagesLoaded,
+    manualRefresh,
     register,
     login,
     logout,
