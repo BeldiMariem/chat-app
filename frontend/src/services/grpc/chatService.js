@@ -8,22 +8,6 @@ export class ChatService {
         this._isAuthenticated = false;
     }
 
-    async testProxyConnection() {
-        try {
-            console.log('🧪 Testing proxy connection...');
-            const response = await fetch('http://localhost:8081');
-            console.log('Proxy response:', response.status, response.statusText);
-
-            const testRequest = createStreamRequest('general', '');
-            console.log('Test request created');
-
-            return true;
-        } catch (error) {
-            console.error('❌ Proxy connection test failed:', error);
-            return false;
-        }
-    }
-
     get isAuthenticated() {
         return this._isAuthenticated;
     }
@@ -176,28 +160,18 @@ export class ChatService {
     }
 
     async sendMessage(userId, username, content, roomId) {
-        console.log('🔍 chatService.sendMessage called with:', { userId, username, content, roomId });
 
         return new Promise((resolve, reject) => {
             const request = createMessageRequest(userId, username, content, roomId);
-
-            console.log('📦 Created request:', request);
-            console.log('🔧 Request serialized:', request.serializeBinary());
-
             this.client.sendMessage(request, {}, (error, response) => {
-                console.log('📨 gRPC response received:', { error, response });
 
                 if (error) {
-                    console.error('❌ gRPC error:', error);
                     reject(new Error(`Failed to send message: ${error.message}`));
                 } else {
                     let result;
                     if (response instanceof Uint8Array) {
-                        console.log('📊 Response is Uint8Array, parsing...');
                         result = this.parseMessageResponse(response);
-                        console.log('📊 Parsed result:', result);
                     } else {
-                        console.log('📊 Response is object:', response);
                         result = {
                             messageId: response.getMessageId(),
                             userId: response.getUserId(),
@@ -207,7 +181,6 @@ export class ChatService {
                             roomId: response.getRoomId()
                         };
                     }
-                    console.log('✅ Message sent successfully, result:', result);
                     resolve(result);
                 }
             });
@@ -244,7 +217,6 @@ export class ChatService {
         });
     }
     async testStreamConnection() {
-        console.log('🧪 Testing stream connection...');
 
         return new Promise((resolve) => {
             const request = createStreamRequest('general', this.token);
@@ -252,103 +224,47 @@ export class ChatService {
             const stream = this.client.streamMessages(request, {});
 
             stream.on('data', (response) => {
-                console.log('✅ STREAM WORKING! Received data:', response);
                 stream.cancel();
                 resolve(true);
             });
 
             stream.on('error', (error) => {
-                console.error('❌ Stream test error:', error);
                 resolve(false);
             });
 
             setTimeout(() => {
-                console.log('⏰ Stream test timeout - no data received');
                 stream.cancel();
                 resolve(false);
             }, 10000);
         });
     }
-    streamMessages(roomId, callbacks) {
-        try {
-            console.log('🔍 Starting message stream for room:', roomId);
-            console.log('🔑 Auth status:', this._isAuthenticated); 
-            console.log('🔑 Token:', this.token);
-
-            const request = createStreamRequest(roomId, this.token);
-            console.log('📦 Stream request created');
-
-            console.log('🚀 Calling gRPC stream method...');
-            const stream = this.client.streamMessages(request, {});
-
-            stream.on('data', (response) => {
-                console.log('📨 Stream data received:', response);
-                console.log('🔧 Response type:', typeof response);
-                console.log('🔧 Is Uint8Array?:', response instanceof Uint8Array);
-
-                let messageData;
-
-                if (response instanceof Uint8Array) {
-                    console.log('🔧 Parsing Uint8Array response');
-                    messageData = this.parseMessageResponse(response);
-                    console.log('🔧 Parsed result:', messageData);
-                } else {
-                    console.log('🔧 Using object response');
-                    messageData = {
-                        messageId: response.getMessageId(),
-                        userId: response.getUserId(),
-                        username: response.getUsername(),
-                        content: response.getContent(),
-                        timestamp: response.getTimestamp(),
-                        roomId: response.getRoomId()
-                    };
-                    console.log('🔧 Object result:', messageData);
-                }
-
-                console.log('💬 Final message data:', messageData);
-
-                if (messageData && messageData.userId && messageData.content) {
-                    console.log('✅ Calling onMessage callback');
-                    callbacks.onMessage?.(messageData);
-                } else {
-                    console.warn('⚠️ Invalid message data, not calling callback');
-                }
-            });
-
-            stream.on('error', (error) => {
-                console.error('❌ Stream error:', {
-                    code: error.code,
-                    message: error.message,
-                    metadata: error.metadata
-                });
-                callbacks.onError?.(error);
-            });
-
-            stream.on('end', () => {
-                console.log('🔚 Stream ended normally');
-                callbacks.onEnd?.();
-            });
-
-            stream.on('status', (status) => {
-                console.log('📊 Stream status:', status);
-                callbacks.onStatus?.(status);
-            });
-
-            console.log('✅ Stream created successfully');
-            return {
-                cancel: () => {
-                    console.log('🛑 Cancelling stream');
-                    stream.cancel();
-                },
-                getStatus: () => stream.getStatus()
-            };
-
-        } catch (error) {
-            console.error('❌ Error creating stream:', error);
-            callbacks.onError?.(error);
-            return null;
-        }
+ streamMessages = (roomId, callbacks) => {
+  
+  const request = new MessageStreamRequest();
+  request.setRoomId(roomId);
+  
+  const stream = chatClient.messageStream(request, {});
+  
+  stream.on('data', (response) => {
+    if (callbacks.onMessage) {
+      callbacks.onMessage(response);
     }
+  });
+  
+  stream.on('error', (error) => {
+    if (callbacks.onError) {
+      callbacks.onError(error);
+    }
+  });
+  
+  stream.on('end', () => {
+    if (callbacks.onEnd) {
+      callbacks.onEnd();
+    }
+  });
+  
+  return stream;
+};
 
     parseAuthResponse(bytes) {
         try {
@@ -405,7 +321,6 @@ export class ChatService {
             return result;
 
         } catch (error) {
-            console.error('❌ Error parsing AuthResponse:', error);
             return null;
         }
     }
@@ -463,7 +378,6 @@ export class ChatService {
             return result;
 
         } catch (error) {
-            console.error('❌ Error parsing UserResponse:', error);
             return null;
         }
     }
@@ -521,7 +435,6 @@ export class ChatService {
             return result;
 
         } catch (error) {
-            console.error('❌ Error parsing MessageResponse:', error);
             return null;
         }
     }
@@ -577,7 +490,6 @@ export class ChatService {
             return { messages };
 
         } catch (error) {
-            console.error('❌ Error parsing HistoryResponse:', error);
             return { messages: [] };
         }
     }
@@ -607,5 +519,4 @@ export const chatService = new ChatService();
 chatService.loadAuthFromStorage();
 if (typeof window !== 'undefined') {
     window.debugChatService = chatService;
-    console.log('🔧 chatService exported globally as window.debugChatService');
 }
