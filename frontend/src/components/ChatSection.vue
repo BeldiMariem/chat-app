@@ -2,7 +2,10 @@
   <div class="chat-section">
     <div class="chat-header">
       <div class="header-content">
-        <div class="user-info">
+        <div 
+          class="user-info" 
+          :class="{ 'hidden-on-mobile': isConnected && isMobile }"
+        >
           <div class="user-avatar">
             <img 
               src="/favicon.ico" 
@@ -15,12 +18,16 @@
             <p class="room-info">Room: <span class="room-name">{{ roomId }}</span></p>
           </div>
         </div>
+        
         <button @click="$emit('logout')" class="logout-btn">
           Logout
         </button>
       </div>
 
-      <div class="connection-controls">
+      <div 
+        class="connection-controls" 
+        :class="{ 'hidden-on-mobile': isConnected && isMobile }"
+      >
         <div class="room-input-container">
           <div class="input-icon">#</div>
           <input 
@@ -38,6 +45,22 @@
           :disabled="!roomId.trim()"
         >
           {{ isConnected ? 'Disconnect' : 'Connect' }}
+        </button>
+      </div>
+
+      <div 
+        v-if="isConnected && isMobile" 
+        class="mobile-header"
+      >
+        <div class="mobile-room-info">
+          <span class="mobile-room-label">Room:</span>
+          <span class="mobile-room-id">{{ roomId }}</span>
+        </div>
+        <button 
+          @click="$emit('toggleConnection')" 
+          class="mobile-disconnect-btn"
+        >
+          Disconnect
         </button>
       </div>
     </div>
@@ -72,6 +95,22 @@
 <script setup>
 import MessageList from './MessageList.vue';
 import MessageInput from './MessageInput.vue';
+import { ref, onMounted, onUnmounted } from 'vue';
+
+const isMobile = ref(false);
+
+const checkMobile = () => {
+  isMobile.value = window.innerWidth <= 768;
+};
+
+onMounted(() => {
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile);
+});
 
 defineProps({
   username: String,
@@ -100,7 +139,7 @@ defineEmits([
   display: flex;
   flex-direction: column;
   flex: 1;
-  margin: 0    ;
+  margin: 0;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 0;
 }
@@ -199,6 +238,57 @@ defineEmits([
   display: flex;
   gap: 16px;
   align-items: center;
+  transition: all 0.3s ease;
+}
+
+.hidden-on-mobile {
+  display: none;
+}
+
+.mobile-header {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.mobile-room-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+
+.mobile-room-label {
+  color: #718096;
+  font-weight: 500;
+}
+
+.mobile-room-id {
+  color: #667eea;
+  font-weight: 600;
+  background: #f7fafc;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.mobile-disconnect-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.mobile-disconnect-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
 }
 
 .room-input-container {
@@ -313,7 +403,6 @@ defineEmits([
   .chat-header {
     padding: 20px 24px;
   }
-  
 
   .user-avatar {
     width: 56px;
@@ -373,6 +462,10 @@ defineEmits([
     width: 100%;
     justify-content: center;
   }
+
+  .mobile-header {
+    display: flex;
+  }
 }
 
 @media (max-width: 480px) {
@@ -403,12 +496,21 @@ defineEmits([
     font-size: 16px;
   }
   
-  .connect-btn, .logout-btn {
+  .connect-btn, .logout-btn, .mobile-disconnect-btn {
     padding: 12px 20px;
   }
   
   .welcome-text {
     font-size: 1.1rem;
+  }
+
+  .mobile-room-info {
+    font-size: 0.9rem;
+  }
+  
+  .mobile-disconnect-btn {
+    padding: 8px 16px;
+    font-size: 0.85rem;
   }
 }
 </style>

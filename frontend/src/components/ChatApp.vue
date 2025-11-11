@@ -1,8 +1,6 @@
 <template>
   <div class="chat-app">
-    <header class="chat-header">
-      <h1>💬 Real-Time Chat App</h1>
-    </header>
+
 
     <main class="chat-main">
       <div v-if="isCheckingAuth" class="loading-auth-section">

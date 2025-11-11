@@ -16,6 +16,6 @@ WORKDIR /root/
 COPY --from=builder /app/main .
 COPY --from=builder /app/firebase-service-account.json ./
 
-ENV PORT=50051
-EXPOSE 50051
+ENV PORT=8078
+EXPOSE 8078
 CMD ["./main"]
