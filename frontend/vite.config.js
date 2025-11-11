@@ -17,7 +17,8 @@ export default defineConfig({
     include: ['google-protobuf', 'grpc-web']
   },
    define: {
-    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+    'import.meta.env.CHAT_API_URL': JSON.stringify(process.env.CHAT_API_URL || 'http://localhost:50051')
   },
   resolve: {
     alias: {

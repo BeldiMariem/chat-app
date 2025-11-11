@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"log"
-	"net"
+	"net/http"
+	"os"
 
 	firebase "firebase.google.com/go"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 
@@ -17,6 +21,12 @@ import (
 
 func main() {
 	ctx := context.Background()
+
+	// Use Render's PORT environment variable
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "50051"
+	}
 
 	opt := option.WithCredentialsFile("firebase-service-account.json")
 	app, err := firebase.NewApp(ctx, nil, opt)
@@ -40,16 +50,39 @@ func main() {
 
 	chatHandler := handlers.NewChatHandler(messageUseCase, authUseCase)
 
-	lis, err := net.Listen("tcp", ":50051")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
+	pb.RegisterChatServiceServer(grpcServer, chatHandler)
+
+	// Wrap gRPC server with gRPC-Web
+	wrappedGrpc := grpcweb.WrapServer(grpcServer,
+		grpcweb.WithOriginFunc(func(origin string) bool {
+			// Allow all origins in production
+			return true
+		}),
+		grpcweb.WithAllowedRequestHeaders([]string{"*"}),
+	)
+
+	// Create HTTP handler that can handle gRPC-Web and HTTP/2
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if wrappedGrpc.IsGrpcWebRequest(r) || wrappedGrpc.IsAcceptableGrpcCorsRequest(r) {
+			wrappedGrpc.ServeHTTP(w, r)
+			return
+		}
+		// Fallback for other HTTP requests
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Chat App gRPC Server is running"))
+	})
+
+	// Create HTTP server with h2c support for HTTP/2 without TLS
+	httpServer := &http.Server{
+		Addr:    ":" + port,
+		Handler: h2c.NewHandler(handler, &http2.Server{}),
 	}
 
-	s := grpc.NewServer()
-	pb.RegisterChatServiceServer(s, chatHandler)
-
-	log.Printf("gRPC server listening at %v", lis.Addr())
-	if err := s.Serve(lis); err != nil {
+	log.Printf("gRPC-Web server listening on port %s", port)
+	if err := httpServer.ListenAndServe(); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
