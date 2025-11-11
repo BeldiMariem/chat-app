@@ -19,13 +19,28 @@ import (
 	"chat-app/backend/internal/usecases"
 )
 
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-grpc-web, x-user-agent")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	ctx := context.Background()
-
-	// Use Render's PORT environment variable
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "50051"
+		port = "8078"
 	}
 
 	opt := option.WithCredentialsFile("firebase-service-account.json")
@@ -44,44 +59,39 @@ func main() {
 
 	messageRepo := infraFirestore.NewMessageRepository(client)
 	userRepo := infraFirestore.NewUserRepository(client)
-
 	authUseCase := usecases.NewAuthUseCase(userRepo)
 	messageUseCase := usecases.NewMessageUseCase(messageRepo, authUseCase)
-
 	chatHandler := handlers.NewChatHandler(messageUseCase, authUseCase)
 
-	// Create gRPC server
 	grpcServer := grpc.NewServer()
 	pb.RegisterChatServiceServer(grpcServer, chatHandler)
 
-	// Wrap gRPC server with gRPC-Web
 	wrappedGrpc := grpcweb.WrapServer(grpcServer,
 		grpcweb.WithOriginFunc(func(origin string) bool {
-			// Allow all origins in production
 			return true
 		}),
 		grpcweb.WithAllowedRequestHeaders([]string{"*"}),
 	)
 
-	// Create HTTP handler that can handle gRPC-Web and HTTP/2
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if wrappedGrpc.IsGrpcWebRequest(r) || wrappedGrpc.IsAcceptableGrpcCorsRequest(r) {
 			wrappedGrpc.ServeHTTP(w, r)
 			return
 		}
-		// Fallback for other HTTP requests
+
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Chat App gRPC Server is running"))
 	})
 
-	// Create HTTP server with h2c support for HTTP/2 without TLS
+	corsHandler := enableCORS(handler)
+
 	httpServer := &http.Server{
-		Addr:    ":" + port,
-		Handler: h2c.NewHandler(handler, &http2.Server{}),
+		Addr:    "0.0.0.0:" + port,
+		Handler: h2c.NewHandler(corsHandler, &http2.Server{}),
 	}
 
-	log.Printf("gRPC-Web server listening on port %s", port)
+	log.Printf("Server listening on 0.0.0.0:%s", port)
 	if err := httpServer.ListenAndServe(); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}

@@ -2,7 +2,8 @@ import * as grpcWeb from 'grpc-web';
 import { ChatServiceClient } from '../../proto/chat_grpc_web_pb.js';
 
 let MessageRequest, StreamRequest, HistoryRequest, UserRequest, TokenRequest;
-const API_URL = import.meta.env.CHAT_API_URL || 'http://localhost:50051'
+const API_URL = "https://chat-backend-mariem.fly.dev";
+
 
 try {
   const chatPb = require('../../proto/chat_pb.js');

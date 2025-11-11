@@ -1,0 +1,20 @@
+# fly.toml app configuration file generated for chat-backend-mariem-little-frog-3187 on 2025-11-11T18:38:47+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'chat-backend-mariem-little-frog-3187'
+primary_region = 'fra'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
