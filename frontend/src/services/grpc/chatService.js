@@ -238,33 +238,33 @@ export class ChatService {
             }, 10000);
         });
     }
- streamMessages = (roomId, callbacks) => {
-  
-  const request = new MessageStreamRequest();
-  request.setRoomId(roomId);
-  
-  const stream = chatClient.messageStream(request, {});
-  
-  stream.on('data', (response) => {
-    if (callbacks.onMessage) {
-      callbacks.onMessage(response);
-    }
-  });
-  
-  stream.on('error', (error) => {
-    if (callbacks.onError) {
-      callbacks.onError(error);
-    }
-  });
-  
-  stream.on('end', () => {
-    if (callbacks.onEnd) {
-      callbacks.onEnd();
-    }
-  });
-  
-  return stream;
-};
+    streamMessages = (roomId, callbacks) => {
+
+        const request = new MessageStreamRequest();
+        request.setRoomId(roomId);
+
+        const stream = chatClient.messageStream(request, {});
+
+        stream.on('data', (response) => {
+            if (callbacks.onMessage) {
+                callbacks.onMessage(response);
+            }
+        });
+
+        stream.on('error', (error) => {
+            if (callbacks.onError) {
+                callbacks.onError(error);
+            }
+        });
+
+        stream.on('end', () => {
+            if (callbacks.onEnd) {
+                callbacks.onEnd();
+            }
+        });
+
+        return stream;
+    };
 
     parseAuthResponse(bytes) {
         try {

@@ -1,0 +1,88 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_IMAGE = 'mariem19/chat-frontend'
+        CHAT_API_URL = "${env.CHAT_API_URL}"
+    }
+    
+    parameters {
+        string(
+            name: 'API_URL',
+            defaultValue: "${env.CHAT_API_URL ?: 'http://localhost:50051'}",
+            description: 'Backend API URL for the frontend'
+        )
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                sh 'echo "Checking out frontend code from GitHub"'
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                    cd frontend
+                    npm ci
+                '''
+            }
+        }
+        
+        stage('Build Frontend') {
+            steps {
+                script {
+                    sh """
+                        cd frontend
+                        npm run build
+                    """
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh """
+                        cd frontend
+                        docker build \
+                            --build-arg CHAT_API_URL=${params.API_URL} \
+                            -t ${env.DOCKER_IMAGE}:latest .
+                    """
+                }
+            }
+        }
+        
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-hub-credentials', 
+                        usernameVariable: 'DOCKER_USERNAME', 
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )]) {
+                        sh """
+                            docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+                            docker push ${env.DOCKER_IMAGE}:latest
+                        """
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline completed'
+            cleanWs() 
+        }
+        success {
+            echo 'Pipeline succeeded!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}

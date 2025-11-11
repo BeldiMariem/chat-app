@@ -1,0 +1,69 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_IMAGE = 'mariem19/chat-backend'
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+        GOOGLE_APPLICATION_CREDENTIALS = credentials('firebase-credentials')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                sh 'echo "Checking out backend code from GitHub"'
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                sh '''
+                    echo "Running backend tests..."
+                    cd backend
+                    go test ./... -v
+                '''
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh """
+                        cd backend
+                        docker build -t ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} -t ${env.DOCKER_IMAGE}:latest .
+                    """
+                }
+            }
+        }
+        
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-hub-credentials', 
+                        usernameVariable: 'DOCKER_USERNAME', 
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )]) {
+                        sh """
+                            docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+                            docker push ${env.DOCKER_IMAGE}:latest
+                        """
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline completed'
+            cleanWs() 
+        }
+        success {
+            echo 'Pipeline succeeded!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
