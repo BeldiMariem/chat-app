@@ -2,13 +2,14 @@
 
 # Real-Time Chat Application 💬
 
-A simple modern, real-time chat application built with **Go** backend, **Vue.js** frontend, and **Firebase Firestore** database. Features **clean architecture**, **gRPC-Web** communication, and responsive design.  
+A simple, real-time chat application built with **Go** backend, **Vue.js** frontend, and **Firebase Firestore** database. Features **clean architecture**, **gRPC-Web** communication, and responsive design.  
 
 This is my personal exploration journey into backend development with Go and RPC communication
 
 ## 🚀 Live Application
 **Access the deployed application here:**  
-🔗 **[https://chat-app.fly.dev](https://chat-app.fly.dev)**
+🔗 **[https://chat-app-real-time.fly.dev](https://chat-app-real-time.fly.dev)**
+
 
 ---
 ## 🚀 Features
@@ -154,22 +155,6 @@ The project includes a Jenkins pipelines for backend and frontend that automatic
 
 **Frontend:**
 - `VITE_API_URL` - Backend API URL
-
-
-
-
-## 🔌 API Endpoints
-
-### gRPC Services
-
-```protobuf
-service ChatService {
-  rpc Login(LoginRequest) returns (LoginResponse);
-  rpc SendMessage(MessageRequest) returns (MessageResponse);
-  rpc StreamMessages(StreamRequest) returns (stream MessageResponse);
-  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
-}
-```
 
 
 
